@@ -121,10 +121,22 @@ type Session struct {
 	Skills   *skills.Index
 	Budgeter contextmgr.Budgeter
 
+	// Checkpointer writes and restores checkpoint.md (ADR-0008). Nil when no
+	// context window is configured, which disables checkpointing end to end.
+	Checkpointer *contextmgr.Checkpointer
+	// Tasks is the task tree, restored from the checkpoint at assembly and
+	// written back on every checkpoint (milestone subsystem #3).
+	Tasks contextmgr.TaskTree
+
 	// OnEvent and OnToolResult are the front-end render hooks, forwarded to the
 	// agent loop on every Run. Nil means no rendering (the non-interactive path).
 	OnEvent      func(provider.Event)
 	OnToolResult func(call provider.ToolCall, result provider.Block)
+
+	// OnCheckpointError reports a failed checkpoint write. The turn itself
+	// succeeded, but the session is no longer durable, so the operator needs to
+	// know. Nil drops the report rather than failing the turn.
+	OnCheckpointError func(error)
 }
 
 // maxJudgeIterations returns the effective cap on judge consults.
@@ -211,7 +223,28 @@ func Assemble(root string, opts Options) (*Session, error) {
 		Budget:    budget,
 	}
 
+	// Checkpointing (ADR-0008). A window is required: without one there is no
+	// high-water mark to cross, so the feature stays off rather than guessing.
+	s.assembleCheckpointer(pc.Config.Context.Window)
+
 	return s, nil
+}
+
+// assembleCheckpointer wires the Checkpointer and restores the task tree from
+// any existing checkpoint. A malformed checkpoint degrades to an empty tree: a
+// corrupt file must not stop the session from starting, since the whole point of
+// the feature is resilience.
+func (s *Session) assembleCheckpointer(window int) {
+	if window <= 0 {
+		return
+	}
+	s.Checkpointer = &contextmgr.Checkpointer{Root: s.Root, Window: window}
+
+	cp, err := s.Checkpointer.Read()
+	if err != nil {
+		return // unreadable checkpoint: start clean
+	}
+	s.Tasks = cp.Tasks
 }
 
 // assembleProvider resolves the model string and selects its adapter.

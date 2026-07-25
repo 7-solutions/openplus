@@ -18,6 +18,9 @@ const MemoryTopK = 5
 type Turn struct {
 	System  string
 	History []provider.Message
+	// Used is the budgeter's estimate of the assembled context's token cost.
+	// It is what the checkpoint high-water decision is measured against.
+	Used int
 }
 
 // AssembleContext builds the context for one turn (ADR-0008): it retrieves
@@ -27,7 +30,7 @@ type Turn struct {
 // Retrieval failures are not fatal. Memory and skills are enrichment — losing
 // them degrades the answer, whereas refusing the turn loses it entirely.
 func (s *Session) AssembleContext(ctx context.Context, userMsg string, history []provider.Message) (Turn, error) {
-	in := contextmgr.Input{System: s.SystemPrompt}
+	in := s.baseInput()
 
 	// Retrieved memory (ADR-0003 hybrid search).
 	if s.Memory != nil {
@@ -56,7 +59,33 @@ func (s *Session) AssembleContext(ctx context.Context, userMsg string, history [
 	return Turn{
 		System:  renderSystem(out),
 		History: out.Recent,
+		Used:    out.Used,
 	}, nil
+}
+
+// baseInput seeds the turn's context. With a checkpoint on disk the base comes
+// from Checkpointer.Reconstruct, so the prior summary and active task enter in
+// ADR-0008 priority order; without one it is just the system prompt.
+//
+// A failed reconstruction degrades to the plain system prompt: a corrupt
+// checkpoint must cost the session its history, not its ability to answer.
+func (s *Session) baseInput() contextmgr.Input {
+	plain := contextmgr.Input{System: s.SystemPrompt}
+	if s.Checkpointer == nil {
+		return plain
+	}
+	// Reconstruct owns the priority mapping (summary -> Checkpoint, active task
+	// -> Task, tree -> Progress).
+	in, err := s.Checkpointer.Reconstruct(s.SystemPrompt, nil, nil)
+	if err != nil {
+		return plain
+	}
+	// Reconstruct falls back to the checkpoint's own message digest when handed
+	// no live messages. The caller always supplies live history a few lines
+	// later, so drop the digest here: a stale digest competing with live
+	// messages for the same budget is strictly worse than the live ones alone.
+	in.Recent = nil
+	return in
 }
 
 // Run assembles context and drives one agent loop to completion, returning the
@@ -132,7 +161,95 @@ func (s *Session) Run(ctx context.Context, userMsg string, history []provider.Me
 	}
 
 	s.persist(ctx, userMsg, final)
+	s.maybeCheckpoint(turn.Used, final)
 	return final, nil
+}
+
+// maybeCheckpoint writes a checkpoint when the assembled context crossed the
+// high-water mark (ADR-0008). It runs after the turn completes, so a crash
+// mid-turn cannot record a half-finished state, and it never touches `final` —
+// the returned history is identical whether or not a checkpoint was written.
+//
+// A write failure is reported rather than returned: the turn already produced
+// value for the user, but losing durability is something the operator must know
+// about, so it goes to OnCheckpointError instead of being dropped.
+func (s *Session) maybeCheckpoint(used int, history []provider.Message) {
+	if s.Checkpointer == nil || !s.Checkpointer.ShouldCheckpoint(used) {
+		return
+	}
+	err := s.Checkpointer.Write(contextmgr.Checkpoint{
+		Summary: buildSummary(history),
+		Tasks:   s.Tasks,
+		Recent:  history,
+	})
+	if err != nil && s.OnCheckpointError != nil {
+		s.OnCheckpointError(err)
+	}
+}
+
+// SummaryCap bounds the checkpoint summary in characters. The summary is the
+// transcript verbatim (no model call, no editorial selection), so it needs a
+// ceiling to stay a checkpoint rather than a second copy of the session.
+const SummaryCap = 8000
+
+// buildSummary renders the retained transcript verbatim, capped at SummaryCap.
+//
+// The cap keeps the most recent whole messages that fit and prepends a marker
+// naming how many earlier ones were dropped. Two deliberate choices: truncation
+// happens at a message boundary (a half-message is worse than an absent one),
+// and the loss is stated in the summary itself — a checkpoint that silently
+// discards the line that mattered is the failure this design exists to avoid.
+func buildSummary(history []provider.Message) string {
+	if len(history) == 0 {
+		return ""
+	}
+
+	rendered := make([]string, len(history))
+	for i, m := range history {
+		rendered[i] = fmt.Sprintf("%s: %s", m.Role, flattenMessage(m.Blocks))
+	}
+
+	// Walk backwards from the newest, keeping whole messages while they fit.
+	total, keepFrom := 0, len(rendered)
+	for i := len(rendered) - 1; i >= 0; i-- {
+		cost := len(rendered[i]) + 1 // +1 for the joining newline
+		if total+cost > SummaryCap {
+			break
+		}
+		total += cost
+		keepFrom = i
+	}
+
+	// Always keep at least the newest message, even if it alone exceeds the cap:
+	// an empty summary would be a silent total loss.
+	if keepFrom == len(rendered) {
+		keepFrom = len(rendered) - 1
+	}
+
+	kept := strings.Join(rendered[keepFrom:], "\n")
+	if keepFrom == 0 {
+		return kept
+	}
+	return fmt.Sprintf("[%d earlier message(s) dropped to fit the checkpoint summary cap]\n%s",
+		keepFrom, kept)
+}
+
+// flattenMessage renders one message's blocks as a single verbatim line. Tool
+// calls and results are included: what the agent did is as much of the record as
+// what it said.
+func flattenMessage(blocks []provider.Block) string {
+	parts := make([]string, 0, len(blocks))
+	for _, b := range blocks {
+		switch b.Kind {
+		case provider.BlockText, provider.BlockThinking:
+			parts = append(parts, b.Text)
+		case provider.BlockToolCall:
+			parts = append(parts, fmt.Sprintf("%s(%s)", b.ToolName, b.ToolInput))
+		case provider.BlockToolResult:
+			parts = append(parts, b.ToolResultText)
+		}
+	}
+	return strings.Join(strings.Fields(strings.Join(parts, " ")), " ")
 }
 
 // persist writes the exchange to memory. A write failure is deliberately
