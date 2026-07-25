@@ -51,6 +51,13 @@ func (s *Session) AssembleContext(ctx context.Context, userMsg string, history [
 		}
 	}
 
+	// Diagnostics for files the agent just changed (change 0026, ADR-0017).
+	// They lead the memory pool: what the agent broke a moment ago outranks a
+	// retrieved chunk, and the budgeter drops from the tail.
+	if d := s.diagnosticsSection(); d != "" {
+		in.Memory = append([]string{d}, in.Memory...)
+	}
+
 	// The new user message plus the prior history are the retained recent
 	// messages the budgeter may trim.
 	in.Recent = append(append([]ports.Message{}, history...), userMessage(userMsg))
@@ -116,7 +123,7 @@ func (s *Session) Run(ctx context.Context, userMsg string, history []ports.Messa
 		Tools:        s.Tools,
 		Gate:         s.Gate,
 		OnEvent:      s.OnEvent,
-		OnToolResult: s.OnToolResult,
+		OnToolResult: s.toolResultHook(),
 	}
 
 	maxIter := s.maxJudgeIterations()

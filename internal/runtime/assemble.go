@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/7solutions/openplus/internal/compose"
 	"github.com/7solutions/openplus/internal/config"
@@ -20,6 +21,7 @@ import (
 	"github.com/7solutions/openplus/internal/coordinate"
 	"github.com/7solutions/openplus/internal/embed"
 	"github.com/7solutions/openplus/internal/improve"
+	"github.com/7solutions/openplus/internal/lsp"
 	"github.com/7solutions/openplus/internal/mcp"
 	"github.com/7solutions/openplus/internal/memo"
 	"github.com/7solutions/openplus/internal/memory"
@@ -124,6 +126,17 @@ type Session struct {
 	// Memory is nil when no embedder is configured.
 	Memory   *memory.Store
 	Embedder embed.Embedder
+
+	// LanguageService answers code-intelligence questions (change 0026,
+	// ADR-0017). Nil unless the lsp config is enabled with at least one server
+	// — and always nil in a fake session, which must never spawn a process.
+	LanguageService ports.LanguageService
+
+	// diagMu guards editedFiles and diagnostics. Both are written from the
+	// async refresh goroutine and read during context assembly.
+	diagMu      sync.Mutex
+	editedFiles map[string]bool
+	diagnostics map[string][]ports.Diagnostic
 
 	Skills   *skills.Index
 	Budgeter contextmgr.Budgeter
@@ -294,6 +307,7 @@ func Assemble(root string, opts Options) (*Session, error) {
 	mcpTools, warnings := s.startMCPServers(context.Background(), pc.Config.MCP)
 	s.MCPWarnings = warnings
 	tools = append(tools, mcpTools...)
+	tools = append(tools, s.assembleLanguageService(opts)...)
 	s.Tools = tool.NewRegistry(tools...)
 	s.ToolSchemas = toolSchemas(s.Tools)
 
@@ -405,6 +419,27 @@ func (s *Session) assembleProvider(opts Options) error {
 	return nil
 }
 
+// assembleLanguageService wires the LSP adapter and returns its tools (change
+// 0026, ADR-0017). It returns nothing in two cases, both deliberate:
+//
+//   - LSP is not configured. It is opt-in; a coding agent must not start
+//     subprocesses the user did not ask for.
+//   - The session is fake. A fake session stands for a hermetic test and must
+//     never wire something that can spawn a process. Change 0025 is the
+//     precedent: a shipped default that reached out during tests took the
+//     runtime suite from 0.9s to 159s.
+//
+// No server starts here. The manager spawns lazily on first use, so enabling
+// LSP costs nothing until the agent asks about a file the config covers.
+func (s *Session) assembleLanguageService(opts Options) []tool.Tool {
+	if opts.Fake || !s.Config.LSP.Configured() {
+		return nil
+	}
+	ls := lsp.NewManager(s.Root, s.Config.LSP)
+	s.LanguageService = ls
+	return tool.LSPTools(ls)
+}
+
 // assembleMemory opens the store and embedder when an embedder is configured.
 // Without one there is no memory: an unembedded store cannot answer a semantic
 // query, so silently opening it would be worse than leaving it off.
@@ -467,6 +502,14 @@ func (s *Session) Close() error {
 	}
 	if err := s.closeMCP(); err != nil && firstErr == nil {
 		firstErr = err
+	}
+	if s.LanguageService != nil {
+		// Language servers are long-lived subprocesses; leaking one outlives
+		// the session that started it.
+		if err := s.LanguageService.Shutdown(context.Background()); err != nil && firstErr == nil {
+			firstErr = err
+		}
+		s.LanguageService = nil
 	}
 	return firstErr
 }
