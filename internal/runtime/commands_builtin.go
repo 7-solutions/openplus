@@ -412,7 +412,7 @@ func (s *Session) cmdSubagents(args string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		return CoordinatedReport(results), nil
+		return CoordinatedReport(coordinatorBackend(s.Coordinator), results), nil
 	}
 
 	var prompts []string

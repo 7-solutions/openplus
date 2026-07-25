@@ -16,6 +16,7 @@ import (
 	"github.com/7solutions/openplus/internal/compose"
 	"github.com/7solutions/openplus/internal/config"
 	"github.com/7solutions/openplus/internal/contextmgr"
+	"github.com/7solutions/openplus/internal/coordinate"
 	"github.com/7solutions/openplus/internal/embed"
 	"github.com/7solutions/openplus/internal/improve"
 	"github.com/7solutions/openplus/internal/memo"
@@ -278,11 +279,10 @@ func Assemble(root string, opts Options) (*Session, error) {
 	// Built-in workflows (ADR-0006).
 	s.registerWorkflows()
 
-	// Symbol coordination (change 0012). The grit adapter reports itself
-	// unavailable when the binary is absent, so this is safe to wire
-	// unconditionally: coordinated fan-out then refuses with an explanation
-	// rather than the feature silently not existing.
-	s.Coordinator = &orchestrate.GritCoordinator{RepoRoot: root}
+	// Symbol coordination (changes 0012/0013). Native is the default and ships
+	// with OpenPlus; grit is opt-in for other languages and multi-machine use;
+	// "none" disables coordinated fan-out entirely.
+	s.Coordinator = buildCoordinator(root, pc.Config.Coordination.Backend)
 
 	// Checkpointing (ADR-0008). A window is required: without one there is no
 	// high-water mark to cross, so the feature stays off rather than guessing.
@@ -443,6 +443,22 @@ func skillRoots(root string) []string {
 		filepath.Join(root, ".claude", "skills"),
 	)
 	return roots
+}
+
+// buildCoordinator selects the symbol coordinator from configuration.
+// "native" (default) ships with OpenPlus; "grit" uses the external binary;
+// "none" disables coordinated fan-out. An empty or unrecognized value falls back
+// to native, since coordinated fan-out working out of the box is the whole point
+// of change 0013.
+func buildCoordinator(root, backend string) orchestrate.Coordinator {
+	switch backend {
+	case "grit":
+		return &orchestrate.GritCoordinator{RepoRoot: root}
+	case "none":
+		return orchestrate.NoCoordinator{}
+	default: // "", "native", or anything unrecognized
+		return &coordinate.NativeCoordinator{RepoRoot: root}
+	}
 }
 
 // toolSchemas converts a registry into the neutral schemas sent to the model.

@@ -174,7 +174,7 @@ func TestSessionDefaultsToNoCoordinator(t *testing.T) {
 
 func TestCoordinatedReportStatesItCommits(t *testing.T) {
 	results := []CoordinatedResult{{ID: "sub-1", Prompt: "p", Merged: true, Output: "done"}}
-	out := CoordinatedReport(results)
+	out := CoordinatedReport("native", results)
 	// grit commits and merges; a user must be told before reading the outcome
 	if !strings.Contains(strings.ToLower(out), "commit") {
 		t.Errorf("report should state that coordinated mode commits:\n%s", out)
@@ -187,7 +187,7 @@ func TestCoordinatedReportSeparatesOutcomes(t *testing.T) {
 		{ID: "sub-2", Prompt: "blocked one", Blocked: true, BlockedBy: "other", BlockedSymbol: "f.go::A"},
 		{ID: "sub-3", Prompt: "failed one", Err: context.Canceled},
 	}
-	out := CoordinatedReport(results)
+	out := CoordinatedReport("native", results)
 	for _, want := range []string{"merged one", "blocked one", "failed one", "other", "f.go::A"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("report missing %q:\n%s", want, out)

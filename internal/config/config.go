@@ -42,6 +42,9 @@ type Config struct {
 
 	// Context configures the token budget and window (ADR-0008).
 	Context Context
+
+	// Coordination configures the subagent symbol coordinator (change 0013).
+	Coordination Coordination
 }
 
 // Embedder is the embedding-model configuration. Memory is only enabled when
@@ -106,6 +109,13 @@ type Context struct {
 	// Window is the model's full context window, used for the checkpoint
 	// high-water mark.
 	Window int
+}
+
+// Coordination is the subagent symbol-coordinator configuration (change 0013).
+type Coordination struct {
+	// Backend selects the coordinator: "native" (default, ships with OpenPlus),
+	// "grit" (external binary), or "none" (disable coordinated fan-out).
+	Backend string
 }
 
 // Provider is one configured model backend.
@@ -175,6 +185,7 @@ func Load(path string) (*Config, error) {
 			Budget: doc.Context.Budget,
 			Window: doc.Context.Window,
 		},
+		Coordination: Coordination{Backend: doc.Coordination.Backend},
 	}
 	cfg.Embedder.applyEnvOverrides()
 	cfg.Memory.applyEnvOverrides()
@@ -243,6 +254,9 @@ type rawConfig struct {
 		Budget int `json:"budget"`
 		Window int `json:"window"`
 	} `json:"context"`
+	Coordination struct {
+		Backend string `json:"backend"`
+	} `json:"coordination"`
 }
 
 type rawProvider struct {

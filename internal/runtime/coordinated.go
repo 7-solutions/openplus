@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/7solutions/openplus/internal/coordinate"
 	"github.com/7solutions/openplus/internal/orchestrate"
 )
 
@@ -60,8 +61,8 @@ func (s *Session) FanoutCoordinated(ctx context.Context, tasks []SubagentTask) (
 	}
 	if !coord.Available() {
 		return nil, fmt.Errorf("runtime: no symbol coordinator available; " +
-			"install grit (https://github.com/rtk-ai/grit) for coordinated fan-out, " +
-			"or run /subagents without --coordinated")
+			"the native coordinator needs a git repository, or install grit " +
+			"(https://github.com/rtk-ai/grit); or run /subagents without --coordinated")
 	}
 
 	maxTasks := s.MaxSubagents
@@ -114,10 +115,10 @@ func (s *Session) FanoutCoordinated(ctx context.Context, tasks []SubagentTask) (
 	return results, nil
 }
 
-// CoordinatedReport renders coordinated results. It leads with the fact that this
-// mode commits, because unlike every other path in OpenPlus a coordinated fan-out
-// writes history to the user's repository.
-func CoordinatedReport(results []CoordinatedResult) string {
+// CoordinatedReport renders coordinated results. It leads with the backend and
+// the fact that this mode commits, because unlike every other path in OpenPlus a
+// coordinated fan-out writes history to the user's repository.
+func CoordinatedReport(backend string, results []CoordinatedResult) string {
 	var merged, blocked, failed int
 	for _, r := range results {
 		switch {
@@ -131,8 +132,11 @@ func CoordinatedReport(results []CoordinatedResult) string {
 	}
 
 	var b strings.Builder
-	fmt.Fprintf(&b, "coordinated fan-out (this mode commits and merges into the repository): "+
-		"%d merged, %d blocked, %d failed\n", merged, blocked, failed)
+	if backend == "" {
+		backend = "native"
+	}
+	fmt.Fprintf(&b, "coordinated fan-out (%s — this mode commits and merges into the repository): "+
+		"%d merged, %d blocked, %d failed\n", backend, merged, blocked, failed)
 
 	for _, r := range results {
 		switch {
@@ -157,6 +161,20 @@ func holderOrUnknown(holder string) string {
 		return "another agent"
 	}
 	return holder
+}
+
+// coordinatorBackend reports which backend a Coordinator is, for the report.
+func coordinatorBackend(c orchestrate.Coordinator) string {
+	switch c.(type) {
+	case *coordinate.NativeCoordinator:
+		return "native"
+	case *orchestrate.GritCoordinator:
+		return "grit"
+	case orchestrate.NoCoordinator:
+		return "none"
+	default:
+		return "unknown"
+	}
 }
 
 // parseCoordinatedTasks splits "prompt#sym,sym | prompt#sym" into tasks. The "#"
