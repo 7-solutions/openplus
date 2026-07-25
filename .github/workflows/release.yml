@@ -1,0 +1,140 @@
+# Release: cross-compile the cgo-free binary for Linux/macOS on amd64/arm64,
+# publish checksummed archives, and attach them to the GitHub release.
+#
+# Triggered by pushing a tag: git tag v0.0.1-alpha && git push origin v0.0.1-alpha
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to build (must already exist)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  # The release gate. Publishing a binary that fails its own tests would be
+  # worse than not publishing: the build matrix below only runs if this passes.
+  verify:
+    name: Verify (gate)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          cache: true
+      - name: Build (cgo-free)
+        env:
+          CGO_ENABLED: "0"
+        run: go build ./...
+      - name: Vet
+        run: go vet ./...
+      - name: Test
+        env:
+          CGO_ENABLED: "0"
+        run: go test -count=1 ./...
+
+  build:
+    name: Build ${{ matrix.goos }}/${{ matrix.goarch }}
+    needs: verify
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          cache: true
+
+      - name: Resolve version
+        id: version
+        run: echo "value=${{ github.event.inputs.tag || github.ref_name }}" >> "$GITHUB_OUTPUT"
+
+      # CGO_ENABLED=0 is the project's hard rule and what makes these
+      # cross-compiles trivial: one static binary per platform, no toolchain.
+      - name: Build
+        env:
+          CGO_ENABLED: "0"
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          mkdir -p dist
+          go build -trimpath \
+            -ldflags "-s -w -X main.Version=${VERSION}" \
+            -o dist/openplus ./cmd/openplus
+
+      - name: Archive
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          cd dist
+          NAME="openplus_${VERSION}_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz"
+          tar -czf "$NAME" openplus
+          rm openplus
+          echo "built $NAME"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: openplus_${{ matrix.goos }}_${{ matrix.goarch }}
+          path: dist/*.tar.gz
+          retention-days: 1
+
+  release:
+    name: Publish release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: staging
+          merge-multiple: true
+
+      - name: Collect and checksum
+        run: |
+          mkdir -p dist
+          find staging -name '*.tar.gz' -exec mv {} dist/ \;
+          cd dist
+          # One checksums.txt for every archive; the installer verifies against it.
+          sha256sum *.tar.gz > checksums.txt
+          echo "--- release assets ---"
+          ls -la
+          cat checksums.txt
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          # A pre-release tag stays marked as such so `releases/latest` does not
+          # point an unsuspecting installer at an alpha.
+          PRERELEASE=""
+          case "$TAG" in
+            *-alpha*|*-beta*|*-rc*) PRERELEASE="--prerelease" ;;
+          esac
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/* --clobber
+          else
+            gh release create "$TAG" dist/* \
+              --title "$TAG" \
+              --generate-notes \
+              $PRERELEASE
+          fi
