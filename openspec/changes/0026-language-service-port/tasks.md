@@ -173,10 +173,18 @@
       `go install golang.org/x/tools/gopls@latest`, add
       `"lsp":{"enabled":true,"servers":{".go":{"command":"gopls"}}}` to
       `opencode.json`, break a Go file, confirm the diagnostic reaches the model.
-- [ ] T-2627 Commits: one per milestone (M1…M5), each with its verify task green.
-      Push (await explicit push instruction).
-- [ ] T-2628 ICM `decisions-openplus` store (high — eleventh port, new hard rule, one
-      new dep, first async context injection).
+- [x] T-2627 Commits on `feat/0026-language-service-port`. **Deviation:** three
+      commits, not five. `internal/runtime/assemble.go` carries both the M3 tool
+      wiring and the M4 diagnostics state, so a strict five-way split would need
+      backward edits and would produce at least one intermediate commit that does not
+      build. Grouped as M1+M2 (`40d753e`, port + adapter), M3+M4 (`752c361`, tools +
+      injection), M5 (`1b185b3`, guard + docs). **Each was verified to build and pass
+      its packages standalone** (`git stash --keep-index`) before committing, so the
+      history stays bisectable. Not pushed — awaiting instruction.
+- [x] T-2628 ICM `decisions-openplus` store (high) — eleventh port, the generalized
+      wire-neutrality hard rule and its proven guard, the library-over-hand-rolled
+      reversal and why, the `context.Background()` refresh subtlety, and the unrun
+      real-server smoke.
 
 ## Notes for the implementer
 - **No `go.lsp.dev` type in a port signature.** This is the change's hard rule
