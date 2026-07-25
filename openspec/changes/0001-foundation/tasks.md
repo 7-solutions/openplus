@@ -10,11 +10,13 @@
 - [x] T-004 Define all ten ports as interfaces with no-op fakes for tests.
 
 ## M1 — Provider core (ADR-0005)
-- [~] T-010 Neutral Request/Event/Block model — **scaffolded**: `internal/provider/types.go`.
-      Round-trip JSON tests still open (adapters don't exist yet to round-trip against).
-- [~] T-011 SSE reader — **scaffolded**: `internal/provider/sse.go` (stdlib `bufio`, generic
-      frame decode) + `sse_test.go`. Adapter-specific event parsing (content_block_delta,
-      chat.completion.chunk) is still open.
+- [x] T-010 Neutral Request/Event/Block model — `internal/provider/types.go`.
+      Round-trip proven by `internal/provider/contract_test.go` (`TestContractRoundTrip`,
+      `TestContractRoundTripToolResult`) across both adapters.
+- [x] T-011 SSE reader — `internal/provider/sse.go` (stdlib `bufio`, generic frame decode)
+      + `sse_test.go`. Adapter-specific parsing for `content_block_delta` and
+      `chat.completion.chunk` is exercised in `internal/provider/anthropic/anthropic_test.go`
+      and `internal/provider/openaicompat/openaicompat_test.go`.
 - [x] T-012 Anthropic Messages adapter: blocks, tools, streaming, thinking.
 - [x] T-013 OpenAI-compatible adapter (Chat Completions): tool_calls, chunk SSE.
 - [x] T-014 Prefix-based adapter selection from `provider/model`.
@@ -31,10 +33,19 @@
       denied-call-does-not-execute). Runnable smoke test: `cmd/openplus/main.go`.
 - [x] T-024 `--dangerously-skip-permissions` (allow-all base, explicit rules win).
 
-> **Scaffold status (verified 2026-07-25):** T-010/T-011/T-016/T-020/T-022/T-023 have
-> real, stdlib-only Go source under `cmd/` and `internal/`. Build green on Go 1.26.5:
-> `go build ./...` clean, `go test ./...` 3 passed (5 packages), `go run ./cmd/openplus`
-> smoke test passes (echo tool loop: assistant→toolcall→result→done).
+> **Scaffold status (verified 2026-07-25):** All scaffolding closed. T-010 and T-011 are
+> now `[x]`; their adapter-specific event parsing (`content_block_delta`,
+> `input_json_delta`, `chat.completion.chunk` + `tool_calls`) is exercised by
+> `internal/provider/anthropic/anthropic_test.go`,
+> `internal/provider/openaicompat/openaicompat_test.go`, and the cross-adapter
+> contract tests in `internal/provider/contract_test.go`
+> (`TestContractRoundTrip`, `TestContractNeutralOutputIsEqualAcrossAdapters`,
+> `TestContractRoundTripToolResult`).
+>
+> Build green on Go 1.26.5: `go build ./...` clean, `go test ./...` shows 19/20
+> packages green. The single failure is `internal/tui.TestSubmitAppendsUserAndStartsBusy`
+> (`model_test.go:79: history = []`), a TUI submit()/history ownership bug
+> tracked by Change 0003 Part B — unrelated to provider scaffolding.
 
 ## M3 — TUI (Crush base, ADR-0001)
 - [x] T-030 Bubble Tea shell: input, streaming output, tool-event view.
