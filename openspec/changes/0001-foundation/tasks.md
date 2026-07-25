@@ -48,8 +48,8 @@
 - [x] T-044 MEMORY.md / notes.md / tasks/<id>/progress.md read-write + resume inject.
 
 ## M5 — Skills (ADR-0002)
-- [ ] T-050 SkillIndex discovery + override scan order.
-- [ ] T-051 BM25 ranking + auto-load threshold; `/skill` explicit invocation.
+- [x] T-050 SkillIndex discovery + override scan order.
+- [x] T-051 BM25 ranking + auto-load threshold; `/skill` explicit invocation.
 
 ## M6 — Context management (ADR-0008)
 - [ ] T-060 Tokenizer port (tiktoken-go + Anthropic heuristic) + calibration tests.
