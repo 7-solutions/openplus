@@ -1,0 +1,374 @@
+package runtime
+
+import (
+	"context"
+	"errors"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/7solutions/openplus/internal/policy"
+	"github.com/7solutions/openplus/internal/provider"
+	"github.com/7solutions/openplus/internal/provider/anthropic"
+	"github.com/7solutions/openplus/internal/provider/openaicompat"
+)
+
+func write(t *testing.T, root, rel, content string) {
+	t.Helper()
+	p := filepath.Join(root, rel)
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(p, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// project writes a minimal opencode.json plus AGENTS.md and returns the root.
+func project(t *testing.T, configJSON string) string {
+	t.Helper()
+	root := t.TempDir()
+	if configJSON != "" {
+		write(t, root, "opencode.json", configJSON)
+	}
+	write(t, root, "AGENTS.md", "House rule: the build is cgo-free.")
+	return root
+}
+
+const anthropicConfig = `{
+  "instructions": ["AGENTS.md"],
+  "model": "anthropic/claude-sonnet-5",
+  "provider": {"anthropic": {"options": {"apiKey": "{env:TEST_ANTHROPIC_KEY}"}}},
+  "permission": {"bash": "ask", "write": "ask"}
+}`
+
+func TestAssembleSelectsAdapterFromConfig(t *testing.T) {
+	t.Setenv("TEST_ANTHROPIC_KEY", "sk-ant-test")
+	s, err := Assemble(project(t, anthropicConfig), Options{})
+	if err != nil {
+		t.Fatalf("Assemble: %v", err)
+	}
+	a, ok := s.Provider.(*anthropic.Adapter)
+	if !ok {
+		t.Fatalf("Provider = %T, want *anthropic.Adapter", s.Provider)
+	}
+	if a.APIKey != "sk-ant-test" {
+		t.Errorf("resolved apiKey = %q", a.APIKey)
+	}
+}
+
+func TestAssembleSelectsOpenAICompatWithBaseURL(t *testing.T) {
+	cfg := `{
+  "model": "local/qwen2.5-coder",
+  "provider": {"local": {"options": {"baseURL": "http://localhost:11434/v1", "apiKey": "ollama"}}}
+}`
+	s, err := Assemble(project(t, cfg), Options{})
+	if err != nil {
+		t.Fatalf("Assemble: %v", err)
+	}
+	oc, ok := s.Provider.(*openaicompat.Adapter)
+	if !ok {
+		t.Fatalf("Provider = %T, want *openaicompat.Adapter", s.Provider)
+	}
+	if oc.BaseURL != "http://localhost:11434/v1" {
+		t.Errorf("baseURL = %q", oc.BaseURL)
+	}
+}
+
+// TestAssembleMissingCredentialFailsClearly is the spec scenario: no silent
+// unauthenticated request, no nil-pointer panic.
+func TestAssembleMissingCredentialFailsClearly(t *testing.T) {
+	cfg := `{
+  "model": "anthropic/claude-sonnet-5",
+  "provider": {"anthropic": {"options": {"apiKey": "{env:DEFINITELY_UNSET_KEY}"}}}
+}`
+	_, err := Assemble(project(t, cfg), Options{})
+	if err == nil {
+		t.Fatal("expected an error when the API key cannot be resolved")
+	}
+	if !errors.Is(err, ErrMissingCredential) {
+		t.Errorf("err = %v, want ErrMissingCredential", err)
+	}
+	if !strings.Contains(err.Error(), "anthropic") {
+		t.Errorf("error should name the provider: %v", err)
+	}
+}
+
+func TestAssembleLocalEndpointNeedsNoCredential(t *testing.T) {
+	// A local endpoint with a baseURL is legitimately keyless.
+	cfg := `{
+  "model": "local/qwen2.5-coder",
+  "provider": {"local": {"options": {"baseURL": "http://localhost:11434/v1"}}}
+}`
+	if _, err := Assemble(project(t, cfg), Options{}); err != nil {
+		t.Fatalf("a keyless local endpoint should assemble: %v", err)
+	}
+}
+
+func TestAssembleFakeOptionNeedsNoConfig(t *testing.T) {
+	s, err := Assemble(project(t, ""), Options{Fake: true})
+	if err != nil {
+		t.Fatalf("Assemble with Fake: %v", err)
+	}
+	if _, ok := s.Provider.(*provider.Fake); !ok {
+		t.Fatalf("Provider = %T, want *provider.Fake", s.Provider)
+	}
+}
+
+func TestAssembleUnknownModelPrefixErrors(t *testing.T) {
+	cfg := `{"model": "mystery/model", "provider": {"mystery": {"options": {"apiKey": "k"}}}}`
+	if _, err := Assemble(project(t, cfg), Options{}); err == nil {
+		t.Fatal("expected an error for a prefix with no adapter")
+	}
+}
+
+func TestAssembleNoModelConfiguredErrors(t *testing.T) {
+	cfg := `{"provider": {"anthropic": {"options": {"apiKey": "k"}}}}`
+	_, err := Assemble(project(t, cfg), Options{})
+	if err == nil {
+		t.Fatal("expected an error when no model is configured")
+	}
+	if !errors.Is(err, ErrNoModel) {
+		t.Errorf("err = %v, want ErrNoModel", err)
+	}
+}
+
+func TestAssembleModelOptionOverridesConfig(t *testing.T) {
+	t.Setenv("TEST_ANTHROPIC_KEY", "k")
+	cfg := `{
+  "model": "anthropic/claude-sonnet-5",
+  "provider": {
+    "anthropic": {"options": {"apiKey": "{env:TEST_ANTHROPIC_KEY}"}},
+    "local": {"options": {"baseURL": "http://localhost:11434/v1"}}
+  }
+}`
+	s, err := Assemble(project(t, cfg), Options{Model: "local/qwen2.5-coder"})
+	if err != nil {
+		t.Fatalf("Assemble: %v", err)
+	}
+	if _, ok := s.Provider.(*openaicompat.Adapter); !ok {
+		t.Fatalf("Provider = %T, want the overridden adapter", s.Provider)
+	}
+	if s.Model != "local/qwen2.5-coder" {
+		t.Errorf("Model = %q", s.Model)
+	}
+}
+
+// TestAssembleIncludesProjectInstructions is the spec scenario for AGENTS.md.
+func TestAssembleIncludesProjectInstructions(t *testing.T) {
+	s, err := Assemble(project(t, ""), Options{Fake: true, BaseSystemPrompt: "You are OpenPlus."})
+	if err != nil {
+		t.Fatalf("Assemble: %v", err)
+	}
+	if !strings.Contains(s.SystemPrompt, "cgo-free") {
+		t.Errorf("AGENTS.md content missing from the system prompt: %q", s.SystemPrompt)
+	}
+	if !strings.HasPrefix(s.SystemPrompt, "You are OpenPlus.") {
+		t.Errorf("base prompt must come first: %q", s.SystemPrompt)
+	}
+}
+
+func TestAssembleRegistersBuiltinTools(t *testing.T) {
+	s, err := Assemble(project(t, ""), Options{Fake: true})
+	if err != nil {
+		t.Fatalf("Assemble: %v", err)
+	}
+	for _, name := range []string{"read", "write", "edit", "bash", "glob", "grep"} {
+		if _, ok := s.Tools.Get(name); !ok {
+			t.Errorf("builtin %q not registered", name)
+		}
+	}
+	// the neutral schemas handed to the model must match the registry
+	if len(s.ToolSchemas) != len(s.Tools.All()) {
+		t.Errorf("ToolSchemas = %d, registry = %d", len(s.ToolSchemas), len(s.Tools.All()))
+	}
+}
+
+// TestAssembleGateFromConfigPermissions is the spec scenario for ask rules.
+func TestAssembleGateFromConfigPermissions(t *testing.T) {
+	t.Setenv("TEST_ANTHROPIC_KEY", "k")
+	s, err := Assemble(project(t, anthropicConfig), Options{})
+	if err != nil {
+		t.Fatalf("Assemble: %v", err)
+	}
+	// the rule table says Ask, straight from permission.bash
+	got, err := s.Rules.Permit(t.Context(), provider.ToolCall{Name: "bash", Input: []byte(`{}`)})
+	if err != nil {
+		t.Fatalf("Permit: %v", err)
+	}
+	if got != policy.Ask {
+		t.Fatalf("bash rule = %v, want Ask (from permission.bash)", got)
+	}
+	// a tool with no rule falls through to allow
+	got, _ = s.Rules.Permit(t.Context(), provider.ToolCall{Name: "read", Input: []byte(`{}`)})
+	if got != policy.Allow {
+		t.Errorf("read rule = %v, want Allow", got)
+	}
+
+	// With no prompter wired, Ask must degrade to Deny rather than silently run.
+	got, _ = s.Gate.Permit(t.Context(), provider.ToolCall{Name: "bash", Input: []byte(`{}`)})
+	if got != policy.Deny {
+		t.Errorf("unwired Ask = %v, want Deny (safe default)", got)
+	}
+}
+
+// TestSetPrompterMakesAskInteractive proves the front-end seam: once a prompter
+// is wired, an Ask rule consults it instead of denying.
+func TestSetPrompterMakesAskInteractive(t *testing.T) {
+	t.Setenv("TEST_ANTHROPIC_KEY", "k")
+	s, err := Assemble(project(t, anthropicConfig), Options{})
+	if err != nil {
+		t.Fatalf("Assemble: %v", err)
+	}
+	s.SetPrompter(approvingPrompter{})
+
+	got, err := s.Gate.Permit(t.Context(), provider.ToolCall{Name: "bash", Input: []byte(`{}`)})
+	if err != nil {
+		t.Fatalf("Permit: %v", err)
+	}
+	if got != policy.Allow {
+		t.Fatalf("approved Ask = %v, want Allow", got)
+	}
+}
+
+// TestSetPrompterUnderSkipIsNoop proves --dangerously-skip-permissions does not
+// become interactive just because a prompter exists.
+func TestSetPrompterUnderSkipIsNoop(t *testing.T) {
+	cfg := `{
+  "model": "local/m",
+  "provider": {"local": {"options": {"baseURL": "http://x/v1"}}},
+  "permission": {"bash": "ask"}
+}`
+	s, err := Assemble(project(t, cfg), Options{SkipPermissions: true})
+	if err != nil {
+		t.Fatalf("Assemble: %v", err)
+	}
+	s.SetPrompter(refusingPrompter{})
+	// under skip, an ask rule is allowed without consulting anything
+	got, _ := s.Gate.Permit(t.Context(), provider.ToolCall{Name: "bash", Input: []byte(`{}`)})
+	if got != policy.Allow {
+		t.Fatalf("skip-mode ask = %v, want Allow", got)
+	}
+}
+
+// TestAssembleSkipPermissionsKeepsExplicitDenials is the spec scenario for the
+// skip flag.
+func TestAssembleSkipPermissionsKeepsExplicitDenials(t *testing.T) {
+	cfg := `{
+  "model": "local/m",
+  "provider": {"local": {"options": {"baseURL": "http://x/v1"}}},
+  "permission": {"bash": "deny", "write": "ask"}
+}`
+	s, err := Assemble(project(t, cfg), Options{SkipPermissions: true})
+	if err != nil {
+		t.Fatalf("Assemble: %v", err)
+	}
+	// explicit deny survives the skip flag
+	got, _ := s.Gate.Permit(t.Context(), provider.ToolCall{Name: "bash", Input: []byte(`{}`)})
+	if got != policy.Deny {
+		t.Errorf("bash decision = %v, want Deny even with skip", got)
+	}
+	// an ask rule becomes allow (no prompting under skip)
+	got, _ = s.Gate.Permit(t.Context(), provider.ToolCall{Name: "write", Input: []byte(`{}`)})
+	if got != policy.Allow {
+		t.Errorf("write decision = %v, want Allow under skip", got)
+	}
+}
+
+// --- T-101: optional subsystems ---
+
+// TestAssembleWithoutEmbedderHasNoMemory is the spec scenario for optional
+// subsystems.
+func TestAssembleWithoutEmbedderHasNoMemory(t *testing.T) {
+	s, err := Assemble(project(t, ""), Options{Fake: true})
+	if err != nil {
+		t.Fatalf("Assemble: %v", err)
+	}
+	if s.Memory != nil {
+		t.Error("no embedder configured, so there should be no memory store")
+	}
+	// and the session is still usable
+	if s.Provider == nil || s.Tools == nil || s.Gate == nil {
+		t.Fatal("session incomplete without memory")
+	}
+}
+
+func TestAssembleWithEmbedderOpensMemory(t *testing.T) {
+	root := project(t, `{
+  "model": "local/qwen2.5-coder",
+  "provider": {"local": {"options": {"baseURL": "http://localhost:11434/v1"}}},
+  "embedder": {"model": "nomic-embed-text", "baseURL": "http://localhost:11434/v1"}
+}`)
+	s, err := Assemble(root, Options{})
+	if err != nil {
+		t.Fatalf("Assemble: %v", err)
+	}
+	if s.Memory == nil {
+		t.Fatal("an embedder is configured, so memory should be open")
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	// vec0 must actually be available in the opened store
+	if v, err := s.Memory.VecVersion(); err != nil || v == "" {
+		t.Fatalf("VecVersion = %q, err = %v", v, err)
+	}
+}
+
+func TestAssembleDiscoversSkills(t *testing.T) {
+	root := project(t, "")
+	write(t, root, ".claude/skills/deploy/SKILL.md",
+		"---\nname: deploy\ndescription: Deploy the service to kubernetes\n---\nsteps here")
+	s, err := Assemble(root, Options{Fake: true})
+	if err != nil {
+		t.Fatalf("Assemble: %v", err)
+	}
+	if s.Skills == nil {
+		t.Fatal("skill index not assembled")
+	}
+	if _, ok := s.Skills.Find("deploy"); !ok {
+		t.Error("project skill not discovered")
+	}
+}
+
+func TestAssembleBudgeterUsesModelTokenizer(t *testing.T) {
+	t.Setenv("TEST_ANTHROPIC_KEY", "k")
+	s, err := Assemble(project(t, anthropicConfig), Options{})
+	if err != nil {
+		t.Fatalf("Assemble: %v", err)
+	}
+	if s.Budgeter.Tokenizer == nil {
+		t.Fatal("budgeter has no tokenizer")
+	}
+	// an anthropic model must get the anthropic-calibrated estimate
+	if got := s.Budgeter.Tokenizer.Count("some text to measure"); got <= 0 {
+		t.Fatalf("Count = %d", got)
+	}
+	if s.Budgeter.Budget <= 0 {
+		t.Error("a positive default budget is expected")
+	}
+}
+
+func TestAssembleMissingProjectRootErrors(t *testing.T) {
+	if _, err := Assemble(filepath.Join(t.TempDir(), "nope"), Options{Fake: true}); err == nil {
+		t.Fatal("expected an error for a nonexistent project root")
+	}
+}
+
+// approvingPrompter approves every Ask; refusingPrompter refuses.
+type approvingPrompter struct{}
+
+func (approvingPrompter) Ask(context.Context, provider.ToolCall) (bool, error) { return true, nil }
+
+type refusingPrompter struct{}
+
+func (refusingPrompter) Ask(context.Context, provider.ToolCall) (bool, error) { return false, nil }
+
+func TestSessionCloseIsSafeWithoutMemory(t *testing.T) {
+	s, err := Assemble(project(t, ""), Options{Fake: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatalf("Close without memory: %v", err)
+	}
+}
