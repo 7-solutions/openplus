@@ -1,7 +1,7 @@
-// Package ports declares the ten seams the OpenPlus core depends on (T-004,
-// design.md; change 0018). It is the single place to read the architecture: the
-// core talks to these interfaces, and every external system is an adapter
-// behind one of them.
+// Package ports declares the eleven seams the OpenPlus core depends on (T-004,
+// design.md; changes 0018 and 0026). It is the single place to read the
+// architecture: the core talks to these interfaces, and every external system
+// is an adapter behind one of them.
 //
 // The canonical Provider port and all provider-neutral model types
 // (Request, Event, Message, Block, BlockKind, Role, ToolSchema, ToolCall,
@@ -30,6 +30,7 @@ func PortNames() []string {
 	return []string{
 		"Provider", "Embedder", "MemoryStore", "Tool", "SkillIndex",
 		"Tokenizer", "Budgeter", "Checkpointer", "PolicyGate", "Workflow",
+		"LanguageService",
 	}
 }
 
@@ -248,6 +249,8 @@ var (
 	_ Checkpointer = (*FakeCheckpointer)(nil)
 	_ PolicyGate   = FakePolicyGate{}
 	_ Workflow     = FakeWorkflow{}
+
+	_ LanguageService = FakeLanguageService{}
 )
 
 // ErrNotImplemented is returned by fakes that deliberately refuse an operation.

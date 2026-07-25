@@ -56,6 +56,50 @@ type Config struct {
 	// MCP maps a server name to its declaration (change 0015). Empty means no
 	// MCP servers. The name prefixes that server's tool names.
 	MCP map[string]MCPServer
+
+	// LSP configures the language servers behind the LanguageService port
+	// (change 0026, ADR-0017). Opt-in: absent means no server is ever spawned.
+	LSP LSP
+}
+
+// LSP is the language-server configuration (ADR-0017). It is opt-in: a session
+// spawns nothing unless Configured reports true.
+type LSP struct {
+	// Enabled turns the LanguageService on. Off by default — a coding agent
+	// must not start subprocesses the user did not ask for.
+	Enabled bool
+
+	// Servers maps a file extension (including the dot, e.g. ".go") to the
+	// language server that handles it.
+	Servers map[string]LSPServer
+}
+
+// LSPServer is one language server: the command to run and its arguments. The
+// user supplies the binary; OpenPlus never downloads a toolchain.
+type LSPServer struct {
+	Command string
+	Args    []string
+}
+
+// Configured reports whether LSP should actually run. Both halves are required:
+// enabling with no servers would spawn nothing, and servers without the flag is
+// a declaration the user has not switched on.
+func (l LSP) Configured() bool { return l.Enabled && len(l.Servers) > 0 }
+
+// ServerFor resolves the language server for a file path by extension. The
+// second result is false when no server is declared for it — callers must not
+// treat a zero-value LSPServer as runnable, since its empty Command would be
+// spawned as garbage.
+func (l LSP) ServerFor(path string) (LSPServer, bool) {
+	ext := filepath.Ext(path)
+	if ext == "" {
+		return LSPServer{}, false
+	}
+	srv, ok := l.Servers[ext]
+	if !ok || srv.Command == "" {
+		return LSPServer{}, false
+	}
+	return srv, true
 }
 
 // MCP transport names. Anything else is a config error: silently defaulting would
@@ -260,6 +304,8 @@ func Load(path string) (*Config, error) {
 	}
 	cfg.MCP = servers
 
+	cfg.LSP = parseLSP(doc.LSP.Enabled, doc.LSP.Servers)
+
 	for id, rp := range doc.Provider {
 		cfg.Providers[id] = Provider{
 			ID:      id,
@@ -411,6 +457,15 @@ type rawConfig struct {
 		Model   string `json:"model"`
 	} `json:"max"`
 	MCP map[string]rawMCPServer `json:"mcp"`
+	LSP struct {
+		Enabled bool                    `json:"enabled"`
+		Servers map[string]rawLSPServer `json:"servers"`
+	} `json:"lsp"`
+}
+
+type rawLSPServer struct {
+	Command string   `json:"command"`
+	Args    []string `json:"args"`
 }
 
 type rawMCPServer struct {
@@ -465,6 +520,31 @@ func parseMCP(raw map[string]rawMCPServer) (map[string]MCPServer, error) {
 		out[name] = s
 	}
 	return out, nil
+}
+
+// parseLSP converts the raw lsp block (change 0026, ADR-0017). Unlike parseMCP
+// it does not reject a malformed entry: a server with no command is dropped
+// rather than failing the load. LSP is an optional enhancement, so one bad
+// entry must not make the whole config unloadable — ServerFor treats a missing
+// extension as "no language server", which is a working state.
+func parseLSP(enabled bool, raw map[string]rawLSPServer) LSP {
+	out := LSP{Enabled: enabled}
+	if len(raw) == 0 {
+		return out
+	}
+	out.Servers = make(map[string]LSPServer, len(raw))
+	for ext, rs := range raw {
+		cmd := expandEnv(rs.Command)
+		if cmd == "" {
+			continue
+		}
+		s := LSPServer{Command: cmd}
+		for _, a := range rs.Args {
+			s.Args = append(s.Args, expandEnv(a))
+		}
+		out.Servers[ext] = s
+	}
+	return out
 }
 
 // expandEnvMap expands {env:VAR} in every value of a string map.

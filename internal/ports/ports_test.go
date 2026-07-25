@@ -177,17 +177,18 @@ func lineAtOffset(goMod, needle string) int {
 // TestAllTenPortsAreDeclared is the T-004 acceptance test: every port named in
 // the design has a compile-time assertion below, so removing or breaking one
 // fails the build rather than drifting silently.
-func TestAllTenPortsAreDeclared(t *testing.T) {
+func TestAllElevenPortsAreDeclared(t *testing.T) {
 	// The assertions live at package scope (see the var block in go's
 	// companion fakes); reaching this point means they all compiled.
 	names := PortNames()
-	if len(names) != 10 {
-		t.Fatalf("PortNames() = %v, want 10 ports", names)
+	if len(names) != 11 {
+		t.Fatalf("PortNames() = %v, want 11 ports", names)
 	}
 	want := map[string]bool{
 		"Provider": true, "Embedder": true, "MemoryStore": true, "Tool": true,
 		"SkillIndex": true, "Tokenizer": true, "Budgeter": true,
 		"Checkpointer": true, "PolicyGate": true, "Workflow": true,
+		"LanguageService": true,
 	}
 	for _, n := range names {
 		if !want[n] {
