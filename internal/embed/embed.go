@@ -84,7 +84,7 @@ func (l *Local) Embed(ctx context.Context, texts []string) ([][]float32, error) 
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("embed: http %d", resp.StatusCode)
+		return nil, &httpStatusError{code: resp.StatusCode}
 	}
 
 	var out struct {
@@ -124,3 +124,82 @@ func (l *Local) Dim() int {
 	defer l.mu.Unlock()
 	return l.dim
 }
+
+// FallbackTo wraps l with a fallback Embedder that is consulted only on
+// transport-class errors (network failure, 5xx, 429). It returns an
+// Embedder; the wrapper itself is a small struct holding primary and
+// fallback. Dim() reports the primary's pinned dimension.
+//
+// FallbackTo does NOT trigger on ErrDimensionDrift (the fallback endpoint
+// almost certainly uses a different model with a different vector space)
+// or on 4xx other than 429 (those are caller errors, not transport errors).
+//
+// Calling FallbackTo on a nil receiver is a programming error and returns
+// nil.
+func (l *Local) FallbackTo(fb Embedder) Embedder {
+	if l == nil {
+		return nil
+	}
+	return &fallbackEmbedder{primary: l, fallback: fb}
+}
+
+// fallbackEmbedder is the Embedder returned by Local.FallbackTo. It tries
+// primary; on transport-class failure it tries fallback. Anything else
+// propagates from primary.
+type fallbackEmbedder struct {
+	primary  Embedder
+	fallback Embedder
+}
+
+func (f *fallbackEmbedder) Embed(ctx context.Context, texts []string) ([][]float32, error) {
+	vecs, err := f.primary.Embed(ctx, texts)
+	if err == nil {
+		return vecs, nil
+	}
+	if !isTransportErr(err) {
+		return nil, err
+	}
+	return f.fallback.Embed(ctx, texts)
+}
+
+func (f *fallbackEmbedder) Dim() int {
+	return f.primary.Dim()
+}
+
+// isTransportErr reports whether err is a transport-class failure:
+// network error, HTTP 5xx, or HTTP 429. ErrDimensionDrift is not
+// transport-class. 4xx other than 429 are not transport-class.
+func isTransportErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, ErrDimensionDrift) {
+		return false
+	}
+	var hErr httpErr
+	if errors.As(err, &hErr) {
+		code := hErr.StatusCode()
+		return code >= 500 || code == http.StatusTooManyRequests
+	}
+	return true
+}
+
+// httpErr is the interface satisfied by errors that carry an HTTP status
+// code. Local's HTTP error wraps one of these so the fallback path can
+// decide without parsing strings.
+type httpErr interface {
+	StatusCode() int
+}
+
+// httpStatusError is returned by Local.Embed when the embedder endpoint
+// responds with a non-200 status. StatusCode() lets the fallback path
+// classify the error without parsing strings.
+type httpStatusError struct {
+	code int
+}
+
+func (e *httpStatusError) Error() string {
+	return fmt.Sprintf("embed: http %d", e.code)
+}
+
+func (e *httpStatusError) StatusCode() int { return e.code }

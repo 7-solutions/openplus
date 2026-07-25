@@ -161,6 +161,106 @@ func TestLocalErrDimensionDrift(t *testing.T) {
 	}
 }
 
+// --- Change 0004 / T-407: FallbackTo retries on transport-class errors ---
+//
+// FallbackTo wraps this Local with a secondary Embedder. The wrapper
+// calls primary; on transport-class failure (network, 5xx, 429) it
+// calls the fallback. Other failures (dim drift, 4xx) propagate
+// without retry.
+
+func TestLocalFallbackOnTransport(t *testing.T) {
+	primary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	t.Cleanup(primary.Close)
+	secondary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	t.Cleanup(secondary.Close)
+	embeddingsFixture(t, secondary, 2, 3)
+
+	primaryEmb := &Local{BaseURL: primary.URL, APIKey: "k", Model: "m"}
+	fallbackEmb := &Local{BaseURL: secondary.URL, APIKey: "k", Model: "m"}
+
+	wrapped := primaryEmb.FallbackTo(fallbackEmb)
+	vecs, err := wrapped.Embed(context.Background(), []string{"a", "b"})
+	if err != nil {
+		t.Fatalf("wrapped Embed: %v", err)
+	}
+	if len(vecs) != 2 || len(vecs[0]) != 3 {
+		t.Fatalf("vecs = %+v", vecs)
+	}
+	// Dim reports the primary's pinned dimension. The primary never
+	// returned 200, so its pinned dim is still 0. The vectors came from
+	// the fallback, whose dim is 3 — but Dim() intentionally reports the
+	// primary's, because dim-drift on the fallback is the caller's
+	// problem to detect.
+	if wrapped.Dim() != 0 {
+		t.Fatalf("Dim = %d, want 0 (primary never returned 200)", wrapped.Dim())
+	}
+}
+
+func TestLocalFallbackSkipsOn4xx(t *testing.T) {
+	// primary returns 400 (4xx, NOT transport-class); fallback must not
+	// be consulted, and the error must propagate.
+	primaryHits := 0
+	fallbackHits := 0
+	primary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		primaryHits++
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = io.WriteString(w, `{"error":"bad"}`)
+	}))
+	t.Cleanup(primary.Close)
+	fallback := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fallbackHits++
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(fallback.Close)
+
+	primaryEmb := &Local{BaseURL: primary.URL, APIKey: "k", Model: "m"}
+	fallbackEmb := &Local{BaseURL: fallback.URL, APIKey: "k", Model: "m"}
+
+	wrapped := primaryEmb.FallbackTo(fallbackEmb)
+	_, err := wrapped.Embed(context.Background(), []string{"x"})
+	if err == nil {
+		t.Fatal("want error from primary 400")
+	}
+	if primaryHits != 1 {
+		t.Errorf("primary hit %d times, want 1", primaryHits)
+	}
+	if fallbackHits != 0 {
+		t.Errorf("fallback was hit %d times, want 0 (4xx is not transport-class)", fallbackHits)
+	}
+}
+
+func TestLocalFallbackSkipsOnDimDrift(t *testing.T) {
+	// Primary returns 4-dim first then 8-dim second (drift). Fallback
+	// must NOT be consulted because the drift error is not transport-class.
+	fallbackHits := 0
+	primary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	t.Cleanup(primary.Close)
+	fallback := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fallbackHits++
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(fallback.Close)
+
+	embeddingsFixture(t, primary, 1, 4)
+	primaryEmb := &Local{BaseURL: primary.URL, APIKey: "k", Model: "m"}
+	fallbackEmb := &Local{BaseURL: fallback.URL, APIKey: "k", Model: "m"}
+
+	wrapped := primaryEmb.FallbackTo(fallbackEmb)
+	if _, err := wrapped.Embed(context.Background(), []string{"first"}); err != nil {
+		t.Fatalf("first: %v", err)
+	}
+	embeddingsFixture(t, primary, 1, 8)
+	_, err := wrapped.Embed(context.Background(), []string{"second"})
+	if !errors.Is(err, ErrDimensionDrift) {
+		t.Errorf("err = %v, want ErrDimensionDrift", err)
+	}
+	if fallbackHits != 0 {
+		t.Errorf("fallback hit %d times, want 0 (dim drift is not transport-class)", fallbackHits)
+	}
+}
+
 // fakeEmbedder is a deterministic in-memory Embedder for store tests (no HTTP).
 type fakeEmbedder struct {
 	dim int
