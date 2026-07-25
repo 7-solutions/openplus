@@ -59,6 +59,9 @@ type Options struct {
 	Fake bool
 	// BaseSystemPrompt precedes the project instructions.
 	BaseSystemPrompt string
+	// ConfigPath overrides the default <root>/opencode.json. Empty means
+	// use the default. Used by --config / -c in the CLI.
+	ConfigPath string
 }
 
 // Session is an assembled, ready-to-run agent session. Fields are ports, not
@@ -103,7 +106,7 @@ func Assemble(root string, opts Options) (*Session, error) {
 		return nil, fmt.Errorf("runtime: project root %q is not a readable directory", root)
 	}
 
-	pc, err := config.LoadProjectContext(root)
+	pc, err := config.LoadProjectContextWithConfig(root, opts.ConfigPath)
 	if err != nil {
 		return nil, err
 	}

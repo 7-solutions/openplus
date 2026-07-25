@@ -37,12 +37,13 @@ func main() {
 
 func run() error {
 	var (
-		root      string
-		model     string
-		skipPerms bool
-		fake      bool
-		prompt    string
-		showVer   bool
+		root       string
+		model      string
+		skipPerms  bool
+		fake       bool
+		prompt     string
+		showVer    bool
+		configPath string
 	)
 	flag.StringVar(&root, "C", ".", "project root")
 	flag.StringVar(&model, "model", "", "model id as <provider>/<model> (overrides opencode.json)")
@@ -51,6 +52,7 @@ func run() error {
 	flag.BoolVar(&fake, "fake", false, "use the scripted fake provider (no API key needed)")
 	flag.StringVar(&prompt, "p", "", "run a single turn with this prompt and exit")
 	flag.BoolVar(&showVer, "version", false, "print the build version and exit")
+	flag.StringVar(&configPath, "config", "", "path to opencode.json (default <root>/opencode.json)")
 	flag.Parse()
 
 	if showVer {
@@ -68,6 +70,7 @@ func run() error {
 		SkipPermissions:  skipPerms,
 		Fake:             fake,
 		BaseSystemPrompt: baseSystemPrompt,
+		ConfigPath:       configPath,
 	})
 	if err != nil {
 		return explain(err)

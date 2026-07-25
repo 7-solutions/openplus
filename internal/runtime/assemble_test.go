@@ -432,7 +432,53 @@ func TestAssembleMemoryAutoOpenCreatesPath(t *testing.T) {
 	}
 }
 
-// --- Change 0004 / T-413: OPENPLUS_MEMORY_PATH env override ---
+// TestAssembleConfigPathOverride: runtime.Options.ConfigPath overrides the
+// default <root>/opencode.json lookup. The override must reach the
+// config loader so a project can keep its config anywhere.
+func TestAssembleConfigPathOverride(t *testing.T) {
+	// Two configs: one in the project root (must be ignored), one at
+	// the explicit override path (must be used). The override contains a
+	// sentinel value only it carries.
+	override := filepath.Join(t.TempDir(), "elsewhere", "my-config.json")
+	if err := os.MkdirAll(filepath.Dir(override), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(override, []byte(`{
+  "model": "local/sentinel-9c41",
+  "provider": {"local": {"options": {"baseURL": "http://localhost:11434/v1"}}}
+}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// The root has a *different* opencode.json with a model that is NOT
+	// "sentinel-9c41". If the override works, Session.Model is sentinel-9c41.
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "opencode.json"), []byte(`{
+  "model": "local/should-be-ignored"
+}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	s, err := Assemble(root, Options{ConfigPath: override})
+	if err != nil {
+		t.Fatalf("Assemble: %v", err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	if s.Model != "local/sentinel-9c41" {
+		t.Errorf("Model = %q, want local/sentinel-9c41 (override did not win)", s.Model)
+	}
+}
+
+// TestAssembleConfigPathMissingErrors: --config /missing.json must fail
+// clearly rather than silently fall back to the default <root>/opencode.json.
+func TestAssembleConfigPathMissingErrors(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "nope.json")
+	root := t.TempDir()
+	_, err := Assemble(root, Options{ConfigPath: missing})
+	if err == nil {
+		t.Fatal("expected an error when --config points at a missing file")
+	}
+}
 //
 // Env wins over opencode.json's memory.path. The store must open at the
 // env path; the file value is irrelevant. Same precedence model as

@@ -52,6 +52,40 @@ func LoadProjectContext(root string) (ProjectContext, error) {
 	return pc, nil
 }
 
+// LoadProjectContextWithConfig is LoadProjectContext with an explicit
+// config path (T-422). Empty configPath means "use the default
+// <root>/opencode.json with lenient missing-file semantics". A non-empty
+// path is treated as an explicit override — a missing or malformed file
+// there is an error, because --config is a deliberate operator choice
+// and a typo should surface as a clear failure.
+//
+// Callers that always want the strict behavior can call this function
+// with a non-empty path; callers that want lenient default-path behavior
+// call LoadProjectContext directly.
+func LoadProjectContextWithConfig(root, configPath string) (ProjectContext, error) {
+	if configPath == "" {
+		return LoadProjectContext(root)
+	}
+	if !filepath.IsAbs(configPath) {
+		configPath = filepath.Join(root, configPath)
+	}
+	pc := ProjectContext{Root: root, Config: &Config{}}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		return ProjectContext{}, fmt.Errorf("config: --config %s: %w", configPath, err)
+	}
+	pc.Config = cfg
+
+	instructions, err := LoadInstructions(root, pc.Config.Instructions)
+	if err != nil {
+		return ProjectContext{}, err
+	}
+	pc.Instructions = instructions
+
+	return pc, nil
+}
+
 // LoadInstructions reads each instruction file relative to root, in order,
 // concatenating them under a header naming the source so the model can tell
 // which file a rule came from. Missing files are skipped (a project need not

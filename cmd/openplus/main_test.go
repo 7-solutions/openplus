@@ -1,9 +1,11 @@
 package main
 
 import (
+	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"testing"
 )
 
@@ -30,6 +32,47 @@ func TestMainVersionFlag(t *testing.T) {
 	}
 	if !versionRe.Match(stdout) {
 		t.Fatalf("stdout = %q, want match %s", stdout, versionRe)
+	}
+}
+
+// --- Change 0004 / T-422: --config points at a non-default opencode.json ---
+
+// TestMainConfigFlagSuccess: --config /tmp/x.json with a valid config and
+// --fake must exit 0 and produce the fake provider's reply. If --config
+// is silently ignored (or fails to load the override), the run would
+// either fail to assemble or hit the default <root>/opencode.json which
+// doesn't exist.
+func TestMainConfigFlagSuccess(t *testing.T) {
+	bin := buildOpenplus(t)
+	dir := t.TempDir()
+	cfg := filepath.Join(dir, "my-config.json")
+	if err := os.WriteFile(cfg, []byte(`{
+  "model": "local/qwen2.5-coder",
+  "provider": {"local": {"options": {"baseURL": "http://localhost:11434/v1"}}}
+}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command(bin, "--config", cfg, "--fake", "-p", "say hello", "-C", dir)
+	stdout, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("--config run failed: %v\n%s", err, stdout)
+	}
+	if !strings.Contains(string(stdout), "openplus runtime is wired") {
+		t.Errorf("stdout = %q, want fake-provider reply", stdout)
+	}
+}
+
+// TestMainConfigFlagMissing: --config /missing.json must exit non-zero
+// with a clear error. (Proves we don't silently fall back to the default
+// <root>/opencode.json when the override is named but missing.)
+func TestMainConfigFlagMissing(t *testing.T) {
+	bin := buildOpenplus(t)
+	missing := filepath.Join(t.TempDir(), "nope.json")
+	cmd := exec.Command(bin, "--config", missing, "--fake", "-C", t.TempDir())
+	stdout, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("--config /missing.json should exit non-zero, got success: %s", stdout)
 	}
 }
 
