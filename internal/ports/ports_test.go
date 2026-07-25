@@ -19,12 +19,18 @@ import (
 	"time"
 )
 
-// bannedDirectDeps is the list of SQL-stack packages that change 0020
-// explicitly removed. Banning them as direct deps is the durable form
-// of the "core depends on ports" rule, applied to the driver story.
+// bannedDirectDeps is the list of SQL/driver packages that changes 0020 and
+// 0022 explicitly removed or superseded. Banning them as direct deps is the
+// durable form of the "core depends on ports" rule, applied to the driver
+// story, and prevents the change-0020 wrong-path mistake from recurring.
 var bannedDirectDeps = []string{
 	"github.com/asg017/sqlite-vec-go-bindings",
 	"github.com/ncruces/go-sqlite3",
+	// github.com/tursodatabase/turso-go is the ARCHIVED standalone binding
+	// (its own README: "moved back to the original turso repo"). Change 0022
+	// re-targeted to the canonical turso.tech/database/tursogo path; this
+	// entry fails the build if the archived path is ever re-pinned directly.
+	"github.com/tursodatabase/turso-go",
 }
 
 // TestNoBannedDirectDeps walks the repo's go.mod and fails if any
@@ -38,23 +44,54 @@ func TestNoBannedDirectDeps(t *testing.T) {
 		// A direct line looks like:  github.com/... vX.Y.Z
 		// An indirect line is commented: // github.com/... vX.Y.Z
 		for _, line := range strings.Split(goMod, "\n") {
-			if !strings.Contains(line, dep) {
-				continue
-			}
 			trimmed := strings.TrimSpace(line)
 			// Indirect lines are commented out.
 			if strings.HasPrefix(trimmed, "//") {
+				continue
+			}
+			// depTokenInLine (not bare strings.Contains) so that banning
+			// "github.com/tursodatabase/turso-go" does NOT match the
+			// legitimate "github.com/tursodatabase/turso-go-platform-libs"
+			// (the v0.7.1 libturso binary) — the dep must be a complete
+			// path token followed by whitespace.
+			if !depTokenInLine(line, dep) {
 				continue
 			}
 			// Must be inside a require block (post-Go 1.17 modules).
 			if !requireDirect && !isInsideRequireBlock(goMod, line) {
 				continue
 			}
-			t.Errorf("banned direct dependency %q is in go.mod (change 0020 removed it). "+
-				"Use github.com/tursodatabase/turso-go (the canonical driver) "+
-				"instead — see openspec/changes/0020-turso-migration/tasks.md.",
+			t.Errorf("banned direct dependency %q is present as a direct dep "+
+				"in go.mod. This package was intentionally removed or "+
+				"superseded — see the bannedDirectDeps comment above for the "+
+				"canonical replacement and the relevant OpenSpec change.",
 				dep)
 		}
+	}
+}
+
+// depTokenInLine reports whether line contains dep as a complete module-path
+// token: the character immediately after dep must be whitespace (or
+// end-of-line), the separator go.mod uses between the path and its version.
+// This prevents a banned short path from matching a legitimate longer path
+// that merely has it as a prefix (e.g. banning ".../turso-go" must not fire
+// on the legitimate ".../turso-go-platform-libs").
+func depTokenInLine(line, dep string) bool {
+	search := line
+	offset := 0
+	for {
+		idx := strings.Index(search, dep)
+		if idx < 0 {
+			return false
+		}
+		after := offset + idx + len(dep)
+		if after >= len(line) || line[after] == ' ' || line[after] == '\t' {
+			return true
+		}
+		// The match ran into a longer path token; advance past it and
+		// look for a true boundary later in the line.
+		search = search[idx+len(dep):]
+		offset += idx + len(dep)
 	}
 }
 

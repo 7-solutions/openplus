@@ -1,14 +1,17 @@
-// Package memory is the persistent memory store (ADR-0003; change 0020).
-// It runs on the cgo-free tursodatabase/turso-go v0.2.2 driver (libturso
-// via purego) with the vector extension bundled into the same binary, so
-// FTS5 (lexical) and the native vector column live in one file-backed
-// database. Memory + embeddings stay local; chunk text never leaves the host.
+// Package memory is the persistent memory store (ADR-0013/0014; changes
+// 0020/0021/0022). It runs on the cgo-free turso.tech/database/tursogo
+// v0.7.1 driver (libturso via purego), with the native vector column
+// (vector32() + vector_distance_cos()) on the primary Turso database.
+// The lexical half of hybrid retrieval runs on a separate cgo-free
+// modernc.org/sqlite FTS5 shadow index (change 0021); Turso's libturso
+// ships no fts5 module, so the two engines are composed behind this
+// package's Store. Memory + embeddings stay local; chunk text never
+// leaves the host.
 //
 // Change 0020 replaced the prior ncruces/go-sqlite3 + sqlite-vec-go-bindings
-// stack with Turso. The two prior deps were removed because Turso provides
-// equivalent functionality natively (vector32() + vector_distance_cos()),
-// and sqlite-vec was ABI-incompatible with the post-ncruces-v0.21 line
-// (it referenced sqlite3.Binary, which was removed in v0.21+).
+// stack with Turso. Change 0022 re-targeted from the archived
+// github.com/tursodatabase/turso-go to the canonical turso.tech/database/
+// tursogo path (ADR-0015).
 package memory
 
 import (
@@ -26,8 +29,9 @@ import (
 	// Turso Go bindings register the database/sql driver under "turso".
 	// Importing the package for side effects is the canonical way to
 	// enable the libturso-backed connection that backs the rest of this
-	// package.
-	_ "github.com/tursodatabase/turso-go"
+	// package. Canonical module path: turso.tech/database/tursogo
+	// (monorepo github.com/tursodatabase/turso @ bindings/go).
+	_ "turso.tech/database/tursogo"
 )
 
 //vecAsJSON helper keeps the strconv import honest (the helper is defined
@@ -35,7 +39,7 @@ import (
 var _ = strconv.FormatFloat
 
 // driverName is the name under which the Turso-backed database/sql driver
-// is registered by the imported tursodatabase/turso-go package.
+// is registered by the imported turso.tech/database/tursogo package.
 const driverName = "turso"
 
 // Store is an open memory database. Methods are safe for concurrent use as the
@@ -327,12 +331,12 @@ func (s *Store) RebuildFTS(ctx context.Context) error {
 // vector column is a real BLOB column on the chunks table; Turso's vector
 // extension consumes it via vector32() / vector_distance_cos().
 //
-// FTS5 is deliberately NOT used in this build: tursodatabase/turso-go
-// v0.2.2 ships libturso WITHOUT the fts5 module compiled in. The hybrid
-// lexical+vector Search pipeline is therefore vector-only for now. When
-// Turso's libturso ships FTS5 (or the project switches to a libturso
-// build with fts5), the chunks_fts virtual table can be re-added here
-// and the bm25 half of Search re-enabled.
+// This primary Turso database is vector-only: turso.tech/database/tursogo
+// v0.7.1 ships libturso WITHOUT the fts5 module (verified across every
+// published binding as of 2026-07-25). The lexical half of hybrid retrieval
+// lives in a separate modernc.org/sqlite FTS5 shadow index (change 0021,
+// ADR-0014), opened via Open(path, WithFTS()). The shadow is a derived
+// index reconstructed from this chunks table by Store.RebuildFTS.
 //
 // user_version is bumped to 3 so the old sqlite-vec (vec0) databases from
 // prior versions are skipped (the schema is incompatible).
