@@ -3,6 +3,7 @@ package embed
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -133,6 +134,30 @@ func TestEmbedTimeoutApplied(t *testing.T) {
 	}
 	if elapsed > time.Second {
 		t.Fatalf("Embed took %v, want < 1s (timeout should have fired near 50ms)", elapsed)
+	}
+}
+
+// --- Change 0004 / T-405: dim-drift surfaces as a typed error ---
+//
+// Today the drift error is a plain fmt.Errorf string. After T-406 it
+// wraps ErrDimensionDrift so callers can distinguish it from transport
+// failures (which FallbackTo handles) and from generic bad responses.
+
+func TestLocalErrDimensionDrift(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	t.Cleanup(srv.Close)
+	embeddingsFixture(t, srv, 1, 4)
+	l := &Local{BaseURL: srv.URL, APIKey: "k", Model: "m"}
+	if _, err := l.Embed(context.Background(), []string{"first"}); err != nil {
+		t.Fatalf("first Embed: %v", err)
+	}
+	embeddingsFixture(t, srv, 1, 8)
+	_, err := l.Embed(context.Background(), []string{"second"})
+	if err == nil {
+		t.Fatal("want dim drift error")
+	}
+	if !errors.Is(err, ErrDimensionDrift) {
+		t.Errorf("err = %v, want errors.Is(_, ErrDimensionDrift)", err)
 	}
 }
 

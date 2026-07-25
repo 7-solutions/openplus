@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"sync"
@@ -20,6 +21,14 @@ const (
 	// http.Client is set.
 	DefaultTimeout = 30 * time.Second
 )
+
+// ErrDimensionDrift is returned by Local.Embed when the endpoint returns
+// vectors whose dimension disagrees with the dimension pinned on the first
+// successful Embed. Callers use errors.Is to distinguish it from transport
+// failures — the fallback path (FallbackTo) does NOT trigger on dim drift,
+// because the fallback endpoint almost certainly uses a different model
+// and a different vector space.
+var ErrDimensionDrift = errors.New("embed: dimension drift")
 
 // Embedder turns text into fixed-dimension float32 vectors. Dim() returns the
 // pinned dimension (0 before the first successful Embed).
@@ -104,7 +113,7 @@ func (l *Local) Embed(ctx context.Context, texts []string) ([][]float32, error) 
 	if l.dim == 0 {
 		l.dim = len(vecs[0])
 	} else if len(vecs[0]) != l.dim {
-		return nil, fmt.Errorf("embed: dimension drift: got %d, pinned %d", len(vecs[0]), l.dim)
+		return nil, fmt.Errorf("got %d, pinned %d: %w", len(vecs[0]), l.dim, ErrDimensionDrift)
 	}
 	return vecs, nil
 }
