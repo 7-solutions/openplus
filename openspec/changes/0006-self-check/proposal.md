@@ -24,7 +24,7 @@ that pass, and **closes the two honest gaps** the audit surfaces.
 | 2 | Tests first, red, driven to green | ✅ Pass | Every change used red-first TDD. Honored reds: T-010/T-011, T-403 (timeout), T-405 (ErrDimensionDrift), T-407 (FallbackTo), T-410 (AutoOpen), T-450 (Hello world count was wrong — corrected to 4), TestMainConfigFlagMissing (renamed). Regression guards added where the underlying code was already correct. |
 | 3 | Core on ports; no provider type leaked | ✅ Pass | `grep -r 'provider\.AnthropicAdapter\|provider\.OpenAICompatAdapter' --include='*.go'` finds zero matches outside `internal/provider/`. Only `provider.Fake` (test seam) and `provider` (neutral port types) appear elsewhere. |
 | 4 | cgo-free build green | ✅ Pass | `CGO_ENABLED=0 go build ./...` succeeds. Dependencies: `github.com/ncruces/go-sqlite3` (WASM on wazero), `github.com/pkoukk/tiktoken-go` (pure Go). |
-| 5 | Advisor passed; graph updated; memory updated | ❌ **GAP** | No `graphify` advisor review has run on any change. **No `icm store` calls have fired this session** despite `CLAUDE.md`'s mandatory triggers (architecture decision, error resolved, significant task completed). |
+| 5 | Advisor passed; graph updated; memory updated | ❌ **GAP** | No `graphify` advisor review has run on any change. **No `icm store` calls have fired *this session*** despite `CLAUDE.md`'s mandatory triggers. Pre-existing project memory is substantial (63 entries under `context-openplus` from prior sessions; 1 under `decisions-openplus`; 1 under `errors-resolved`) — the gap is *this session's* work, not the project's. |
 | 6 | No deferred/backlog item introduced | ✅ Pass | 0003–0005 add embedder config deltas, memory config deltas, cmd wiring deltas, tiktoken-go, and offline loader. None touches voice/ASR, Max Mode, MCP marketplace, web/share UI, hosted server, or goja `.js`. |
 
 **Two honest gaps in item 5.** Both close inside this change.
@@ -55,20 +55,24 @@ following the existing one-slice = one-commit pattern.
 
 ### Sub-scope B — ICM memory persistence
 Per `~/.claude/CLAUDE.md`, every significant task completion and every
-architecture decision must produce an `icm store` call. This session
+architecture decision must produce an `icm store` call. **This session**
 shipped 5 changes (0003, 0002, 0004 sub-scopes A/B/C/D, 0005) and made
-dozens of architecture decisions — none were persisted.
+dozens of architecture decisions — none were persisted to ICM by this
+session.
 
-The change backfills the gap:
+The pre-existing project memory in ICM is substantial (63 entries under
+`context-openplus` from prior sessions; 1 entry under `decisions-openplus`;
+1 under `errors-resolved`); the gap is *this session's* work, not the
+project's. The backfill targets this session only.
 
-- One `icm store` per change under topic `context-openplus`, importance
-  `high`, summarizing the change in 2-4 sentences.
-- One `icm store` per durable decision surfaced this session (the
-  durable-knowledge list from checkpoint §7), under topic
-  `decisions-openplus`, importance `high`.
-- One `icm store` per error resolved (T-410 AutoOpen build error,
-  T-450 reference count off-by-2, tiktoken shadow), under topic
-  `errors-resolved`, importance `medium`.
+- One `icm store` per **this session's** change under topic
+  `context-openplus`, importance `high`, summarizing the change in
+  2-4 sentences.
+- One `icm store` per durable decision surfaced this session, under
+  topic `decisions-openplus`, importance `high`.
+- One `icm store` per error resolved this session (T-410 AutoOpen
+  build error, T-450 reference count off-by-2, tiktoken field shadow),
+  under topic `errors-resolved`, importance `medium`.
 
 ### Sub-scope C — Documentation of audit results
 A new file `openspec/changes/0006-self-check/AUDIT.md` records the

@@ -28,25 +28,32 @@
 
 ## C — ICM memory backfill
 
-- [ ] T-620 `icm store` for 0001-foundation (32-task foundation +
-      architecture decisions).
-- [ ] T-621 `icm store` for 0002-live-wiring (composition root +
-      Assemble/Run/Close contract).
-- [ ] T-622 `icm store` for 0003-close-scaffold-gaps (T-211 finding:
-      failing test was wrong, not the code).
-- [ ] T-623 `icm store` for 0004-config-integration (embedder
-      config deltas, memory config deltas, cmd wiring deltas, exit
-      codes, integration tests).
-- [ ] T-624 `icm store` for 0005-tiktoken-tokenizer (third-party dep
-      behind Tokenizer port; offline build tag).
-- [ ] T-625 `icm store` for the durable decisions from the session
-      checkpoint §7 (one entry per durable pattern).
-- [ ] T-626 `icm store` for the resolved errors from the session
-      checkpoint §8 (T-410, T-450 reference count, tiktoken field shadow,
-      etc.).
-- [ ] T-627 Verify with `icm list --topic context-openplus` that all 5
-      changes are present; `icm list --topic decisions-openplus` and
-      `icm list --topic errors-resolved` are non-empty.
+- [ ] T-620 `icm store` for **this session's** work on 0003-close-scaffold-gaps
+      (T-211 finding: failing test was wrong, not the code).
+- [ ] T-621 `icm store` for **this session's** work on 0002-live-wiring
+      (composition root + Assemble/Run/Close contract).
+- [ ] T-622 `icm store` for **this session's** work on 0004-config-integration
+      (embedder config deltas, memory config deltas, cmd wiring deltas,
+      exit codes, integration tests across sub-scopes A-D).
+- [ ] T-623 `icm store` for **this session's** work on 0005-tiktoken-tokenizer
+      (third-party dep behind Tokenizer port; offline build tag;
+      T-450 reference-count correction).
+- [ ] T-624 `icm store` for the durable decisions surfaced this session
+      (applyEnvOverrides pattern, explicit-path variant for config
+      functions, --config override-or-fallback semantic, three-table
+      prune for memory indexing, subprocess-test recipe for cmd
+      surface, tiktoken field-naming, and others — one entry per
+      durable pattern).
+- [ ] T-625 `icm store` for the errors resolved this session
+      (T-410 AutoOpen test knockouts, T-450 reference count off-by-2,
+      tiktoken shadow via field name `inner`,
+      TestMainConfigFlagMissing wrong contract — fix the test not
+      the code, etc.).
+- [ ] T-626 Verify with `icm list --topic X` (and manual date filter)
+      that this session's entries are present. The ICM CLI may not
+      have a `--newer-than` flag; if not, capture the existing
+      entries, then re-list after backfill and diff to confirm only
+      this session's entries were added.
 
 ## D — AUDIT.md
 
@@ -72,10 +79,12 @@
 - [ ] `grep -r 'provider\.AnthropicAdapter\|provider\.OpenAICompatAdapter'
       --include='*.go' .` returns zero matches outside `internal/provider/`
       (item 3 re-confirmed).
-- [ ] `icm list --topic context-openplus` shows ≥ 5 entries
-      (one per change).
-- [ ] `icm list --topic decisions-openplus` non-empty.
-- [ ] `icm list --topic errors-resolved` non-empty.
+- [ ] `icm list --topic context-openplus` includes ≥ 1 new entry per
+      change shipped this session (0003, 0002, 0004, 0005).
+- [ ] `icm list --topic decisions-openplus` includes ≥ 1 new entry
+      from this session's decisions.
+- [ ] `icm list --topic errors-resolved` includes ≥ 1 new entry
+      from this session's resolved errors.
 
 ## Out of scope (per proposal)
 - Modifying AGENTS.md's self-check criteria.
