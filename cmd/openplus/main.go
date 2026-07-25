@@ -169,8 +169,17 @@ func runOnce(session *runtime.Session, prompt string) error {
 // program and wiring the permission prompter.
 func runTUI(session *runtime.Session) error {
 	answer := make(chan bool, 1)
-	m := tui.New(session, session.SystemPrompt).WithAnswer(answer)
+
+	// The configured palette applies from the first frame (change 0017). An
+	// unknown name warns and falls back: appearance never blocks a session.
+	palette, warn := tui.ResolveTheme(session.Config.TUI.Theme)
+	if warn != "" {
+		fmt.Fprintf(os.Stderr, "! %s\n", warn)
+	}
+
+	m := tui.New(session, session.SystemPrompt).WithAnswer(answer).WithTheme(palette)
 	p := tea.NewProgram(m, tea.WithAltScreen())
+	session.Theme = tui.NewThemeControl(p.Send, palette.Name)
 
 	session.OnEvent = func(ev provider.Event) { p.Send(tui.StreamMsg(ev)) }
 	session.OnToolResult = func(call provider.ToolCall, res provider.Block) {

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/7solutions/openplus/internal/compose"
+	"github.com/7solutions/openplus/internal/config"
 	"github.com/7solutions/openplus/internal/improve"
 )
 
@@ -103,6 +104,12 @@ var builtinCommands = map[string]Command{
 	"workflows": {
 		Name: "workflows", Usage: "/workflows", Summary: "list registered workflows",
 		Run: (*Session).cmdWorkflows,
+	},
+
+	// --- appearance (change 0017, ADR-0012) ---
+	"theme": {
+		Name: "theme", Usage: "/theme [name]", Summary: "list color themes, or switch to one",
+		Run: (*Session).cmdTheme,
 	},
 }
 
@@ -387,6 +394,57 @@ func (s *Session) cmdDream(_ string) (string, error) {
 		}
 	}
 	return fmt.Sprintf("appended %d fact(s) to MEMORY.md", len(facts)), nil
+}
+
+// --- appearance ---
+
+// cmdTheme lists the front-end's color themes, or switches to one and persists
+// the choice as tui.theme so it survives a restart (change 0017).
+//
+// The switch happens before the write: a persisted theme the front-end rejected
+// would come back on the next start. A failed write is reported but does not undo
+// the switch — the user asked for it, and the session should honor that.
+func (s *Session) cmdTheme(args string) (string, error) {
+	if s.Theme == nil {
+		return "", fmt.Errorf("runtime: /theme needs an attached front-end " +
+			"(themes are a TUI feature; this session is headless)")
+	}
+	names := s.Theme.ThemeNames()
+
+	name := strings.TrimSpace(args)
+	if name == "" {
+		var b strings.Builder
+		fmt.Fprintf(&b, "%d theme(s) — * marks the active one:\n", len(names))
+		active := s.Theme.Theme()
+		for _, n := range names {
+			mark := " "
+			if n == active {
+				mark = "*"
+			}
+			fmt.Fprintf(&b, "  %s %s\n", mark, n)
+		}
+		b.WriteString("switch with /theme <name>")
+		return b.String(), nil
+	}
+
+	known := false
+	for _, n := range names {
+		if n == name {
+			known = true
+			break
+		}
+	}
+	if !known {
+		return "", fmt.Errorf("runtime: unknown theme %q; available: %s",
+			name, strings.Join(names, ", "))
+	}
+	if err := s.Theme.SetTheme(name); err != nil {
+		return "", fmt.Errorf("runtime: /theme: %w", err)
+	}
+	if err := config.SetTUITheme(s.ConfigPath, name); err != nil {
+		return fmt.Sprintf("theme %s is active, but it could not be saved: %v", name, err), nil
+	}
+	return fmt.Sprintf("theme %s is active and saved to %s", name, s.ConfigPath), nil
 }
 
 // --- orchestration ---

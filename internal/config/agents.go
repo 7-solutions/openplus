@@ -11,6 +11,24 @@ import (
 // It is the canonical location for project rules (see the repo's own AGENTS.md).
 const DefaultInstructionFile = "AGENTS.md"
 
+// DefaultConfigFile is the config file looked for under a project root.
+const DefaultConfigFile = "opencode.json"
+
+// ResolveConfigPath returns the config file a root plus an optional override
+// resolves to, whether or not it exists. An empty override means
+// <root>/opencode.json; a relative override is taken relative to root. Callers
+// that need to write the config (e.g. /theme persisting a palette) use this to
+// find the same file the session was loaded from.
+func ResolveConfigPath(root, configPath string) string {
+	if configPath == "" {
+		return filepath.Join(root, DefaultConfigFile)
+	}
+	if !filepath.IsAbs(configPath) {
+		return filepath.Join(root, configPath)
+	}
+	return configPath
+}
+
 // ProjectContext is a project's assembled configuration and instructions —
 // everything the agent needs to know about *this* repo before its first turn
 // (T-003).
@@ -32,7 +50,7 @@ type ProjectContext struct {
 func LoadProjectContext(root string) (ProjectContext, error) {
 	pc := ProjectContext{Root: root, Config: &Config{}}
 
-	configPath := filepath.Join(root, "opencode.json")
+	configPath := ResolveConfigPath(root, "")
 	if _, err := os.Stat(configPath); err == nil {
 		cfg, err := Load(configPath)
 		if err != nil {

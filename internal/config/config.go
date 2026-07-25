@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -45,6 +46,18 @@ type Config struct {
 
 	// Coordination configures the subagent symbol coordinator (change 0013).
 	Coordination Coordination
+
+	// TUI configures the front-end's appearance (change 0017).
+	TUI TUI
+}
+
+// TUI is the front-end configuration (change 0017, ADR-0012).
+type TUI struct {
+	// Theme names the initial palette ("default", "deutan", "protan",
+	// "tritan"). Empty means the front-end's default; an unknown name falls
+	// back to it with a warning rather than failing the session, because an
+	// appearance setting must never block work.
+	Theme string
 }
 
 // Embedder is the embedding-model configuration. Memory is only enabled when
@@ -186,6 +199,7 @@ func Load(path string) (*Config, error) {
 			Window: doc.Context.Window,
 		},
 		Coordination: Coordination{Backend: doc.Coordination.Backend},
+		TUI:          TUI{Theme: doc.TUI.Theme},
 	}
 	cfg.Embedder.applyEnvOverrides()
 	cfg.Memory.applyEnvOverrides()
@@ -201,6 +215,82 @@ func Load(path string) (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+// SetTUITheme persists theme as tui.theme in the config file at path, leaving
+// every other key intact — the file belongs to the user, so this is a targeted
+// patch and not a rewrite from the parsed Config (which would drop keys this
+// package does not model, e.g. "$schema"). A missing file is created: a fresh
+// project has no opencode.json yet, and picking a theme should not require one.
+//
+// Keys are re-emitted in sorted order (Go marshals maps sorted); content is
+// preserved, formatting is not.
+func SetTUITheme(path, theme string) error {
+	doc := map[string]json.RawMessage{}
+	mode := os.FileMode(0o600)
+
+	raw, err := os.ReadFile(path)
+	switch {
+	case err == nil:
+		if err := json.Unmarshal(raw, &doc); err != nil {
+			return fmt.Errorf("config: parse %s: %w", path, err)
+		}
+		if fi, err := os.Stat(path); err == nil {
+			mode = fi.Mode().Perm()
+		}
+	case !os.IsNotExist(err):
+		return fmt.Errorf("config: read %s: %w", path, err)
+	}
+
+	// Merge into any existing tui object so a sibling tui setting survives.
+	section := map[string]json.RawMessage{}
+	if cur, ok := doc["tui"]; ok {
+		if err := json.Unmarshal(cur, &section); err != nil {
+			return fmt.Errorf("config: %s: \"tui\" is not an object: %w", path, err)
+		}
+	}
+	name, err := json.Marshal(theme)
+	if err != nil {
+		return fmt.Errorf("config: encode theme: %w", err)
+	}
+	section["theme"] = name
+
+	encoded, err := json.Marshal(section)
+	if err != nil {
+		return fmt.Errorf("config: encode tui section: %w", err)
+	}
+	doc["tui"] = encoded
+
+	out, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		return fmt.Errorf("config: encode %s: %w", path, err)
+	}
+	out = append(out, '\n')
+
+	// Write via a temp file in the same directory and rename: a crash or a full
+	// disk must not leave the user with a truncated opencode.json. Concurrent
+	// writers are still last-one-wins, which is acceptable for a hand-edited
+	// settings file but means an interactive edit racing /theme can be lost.
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".opencode-*.json")
+	if err != nil {
+		return fmt.Errorf("config: write %s: %w", path, err)
+	}
+	tmpName := tmp.Name()
+	defer os.Remove(tmpName) // no-op once the rename succeeds
+	if _, err := tmp.Write(out); err != nil {
+		tmp.Close()
+		return fmt.Errorf("config: write %s: %w", tmpName, err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("config: close %s: %w", tmpName, err)
+	}
+	if err := os.Chmod(tmpName, mode); err != nil {
+		return fmt.Errorf("config: chmod %s: %w", tmpName, err)
+	}
+	if err := os.Rename(tmpName, path); err != nil {
+		return fmt.Errorf("config: replace %s: %w", path, err)
+	}
+	return nil
 }
 
 // ParseModel splits a "<provider>/<model>" string into its provider id and
@@ -257,6 +347,9 @@ type rawConfig struct {
 	Coordination struct {
 		Backend string `json:"backend"`
 	} `json:"coordination"`
+	TUI struct {
+		Theme string `json:"theme"`
+	} `json:"tui"`
 }
 
 type rawProvider struct {

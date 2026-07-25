@@ -184,9 +184,30 @@ type Session struct {
 	// Runs records each turn's tool sequence for /distill.
 	Runs []improve.Run
 
+	// ConfigPath is the resolved opencode.json this session was loaded from,
+	// whether or not the file exists. /theme persists into it.
+	ConfigPath string
+
+	// Theme is the attached front-end's palette control (change 0017). Nil when
+	// no front-end is attached, which makes /theme report that rather than
+	// pretending to switch — theming is a front-end capability.
+	Theme Themer
+
 	// extraCommands holds session-local command registrations. Builtins always
 	// win, so a registration cannot hijack /help.
 	extraCommands map[string]Command
+}
+
+// Themer is the front-end theme seam (change 0017, ADR-0012). internal/tui
+// implements it; the runtime depends on this interface so no front-end type
+// reaches the session.
+type Themer interface {
+	// ThemeNames lists the selectable palettes, in presentation order.
+	ThemeNames() []string
+	// Theme reports the active palette's name.
+	Theme() string
+	// SetTheme switches the active palette. An unknown name is an error.
+	SetTheme(name string) error
 }
 
 // maxJudgeIterations returns the effective cap on judge consults.
@@ -226,6 +247,7 @@ func Assemble(root string, opts Options) (*Session, error) {
 
 	s := &Session{
 		Root:               root,
+		ConfigPath:         config.ResolveConfigPath(root, opts.ConfigPath),
 		Config:             pc.Config,
 		SystemPrompt:       pc.SystemPrompt(base),
 		Goal:               opts.Goal,

@@ -14,7 +14,6 @@ import (
 
 	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 
 	"github.com/7solutions/openplus/internal/provider"
 )
@@ -63,6 +62,7 @@ type NoticeMsg struct {
 type Model struct {
 	runner  Runner
 	system  string
+	theme   Palette
 	history []provider.Message
 
 	input textarea.Model
@@ -92,8 +92,23 @@ func New(r Runner, system string) Model {
 	return Model{
 		runner: r,
 		system: system,
+		theme:  Default(),
 		input:  ta,
 	}
+}
+
+// WithTheme returns a copy of the model using the given palette (functional, like
+// WithAnswer). The initial theme comes from config in New; this is the runtime
+// switch path (T-1715).
+func (m Model) WithTheme(p Palette) Model {
+	m.theme = p
+	return m
+}
+
+// themeMsg switches the active palette by name; an unknown name is a no-op so a
+// bad input cannot blank the screen. Sent into the program to re-theme at runtime.
+type themeMsg struct {
+	name string
 }
 
 // WithAnswer returns a copy of the model with the permission-prompt reply
@@ -131,6 +146,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// interleave with the message it interrupted.
 		m.flushText()
 		m.log = append(m.log, "· "+msg.Text)
+		return m, nil
+
+	case themeMsg:
+		if p, ok := PaletteByName(msg.name); ok {
+			m.theme = p
+		}
 		return m, nil
 
 	case turnDoneMsg:
@@ -300,11 +321,11 @@ func (m Model) View() string {
 		b.WriteByte('\n')
 	}
 	if m.busy {
-		b.WriteString(lipgloss.NewStyle().Faint(true).Render("…working…"))
+		b.WriteString(m.theme.WorkingStyle().Render("…working…"))
 		b.WriteByte('\n')
 	}
 	if m.pending != nil {
-		b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("3")).Render(
+		b.WriteString(m.theme.PromptStyle().Render(
 			fmt.Sprintf("allow %s(%s)? [y/n]", m.pending.Name, m.pending.Input)))
 		b.WriteByte('\n')
 	}
