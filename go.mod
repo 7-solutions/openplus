@@ -3,14 +3,13 @@ module github.com/7solutions/openplus
 go 1.26
 
 require (
-	github.com/asg017/sqlite-vec-go-bindings v0.1.6
 	github.com/charmbracelet/bubbles v1.0.0
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/dop251/goja v0.0.0-20260723142020-b4aef50fa347
-	github.com/ncruces/go-sqlite3 v0.20.3
 	github.com/pkoukk/tiktoken-go v0.1.8
 	github.com/pkoukk/tiktoken-go-loader v0.0.2
+	github.com/tursodatabase/turso-go v0.2.2
 	golang.org/x/term v0.45.0
 )
 
@@ -26,6 +25,7 @@ require (
 	github.com/clipperhouse/uax29/v2 v2.5.0 // indirect
 	github.com/dlclark/regexp2 v1.10.0 // indirect
 	github.com/dlclark/regexp2/v2 v2.5.2 // indirect
+	github.com/ebitengine/purego v0.10.0-alpha.2 // indirect
 	github.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f // indirect
 	github.com/go-sourcemap/sourcemap v2.1.3+incompatible // indirect
 	github.com/google/pprof v0.0.0-20230207041349-798e818bf904 // indirect
@@ -37,9 +37,7 @@ require (
 	github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/muesli/termenv v0.16.0 // indirect
-	github.com/ncruces/julianday v1.0.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
-	github.com/tetratelabs/wazero v1.8.2 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/text v0.39.0 // indirect

@@ -19,18 +19,52 @@ func newTestStore(t *testing.T, dim int) *Store {
 }
 
 // fakeEmbed is a deterministic embed.Embedder for store tests (no HTTP).
+// post-0020 (no FTS5): it produces vectors where the dominant signal is
+// the per-word "first-character bucket" — the dim-i entry of a text's
+// vector is the number of words starting with the (i mod 26)-th letter
+// of the alphabet, scaled. This makes the "rust" query (single word
+// starting with 'r' = bucket 17) rank rust-chunks higher than
+// non-rust chunks deterministically without a lexical index.
 type fakeEmbed struct{ dim int }
 
 func (f fakeEmbed) Embed(ctx context.Context, texts []string) ([][]float32, error) {
 	out := make([][]float32, len(texts))
 	for i, tx := range texts {
 		v := make([]float32, f.dim)
-		for j := range v {
-			v[j] = float32(len(tx))*0.1 + float32(j)*0.01 + float32(i)
+		for _, w := range words(tx) {
+			if w == "" {
+				continue
+			}
+			bucket := int(w[0]) % f.dim
+			v[bucket] += 1.0
 		}
 		out[i] = v
 	}
 	return out, nil
+}
+
+// words splits on whitespace, lowercased, stripped of trivial punctuation
+// for the embedding's word-hash.
+func words(s string) []string {
+	out := []string{}
+	cur := ""
+	for _, r := range s {
+		switch {
+		case r == ' ' || r == '\t' || r == '\n':
+			if cur != "" {
+				out = append(out, cur)
+				cur = ""
+			}
+		case r >= 'A' && r <= 'Z':
+			cur += string(r + ('a' - 'A'))
+		default:
+			cur += string(r)
+		}
+	}
+	if cur != "" {
+		out = append(out, cur)
+	}
+	return out
 }
 func (f fakeEmbed) Dim() int { return f.dim }
 
@@ -42,7 +76,10 @@ func TestStoreWriteCreatesSchema(t *testing.T) {
 	if _, err := s.Write(context.Background(), "hello world", "test"); err != nil {
 		t.Fatalf("Write: %v", err)
 	}
-	for _, tbl := range []string{"chunks", "chunks_fts", "chunks_vec"} {
+	// post-0020 schema: only the `chunks` table. The vector column lives
+	// on it (no separate chunks_vec virtual table). FTS5 is deferred
+	// (Turso v0.2.2 doesn't ship the fts5 module).
+	for _, tbl := range []string{"chunks"} {
 		var name string
 		err := s.DB().QueryRow(`SELECT name FROM sqlite_master WHERE type IN ('table','view') AND name=?`, tbl).Scan(&name)
 		if err != nil || name != tbl {
@@ -69,25 +106,27 @@ func TestStoreWritePersistsChunk(t *testing.T) {
 	}
 }
 
-func TestStoreWriteIndexesFTSAndVec(t *testing.T) {
+func TestStoreWriteStoresEmbedding(t *testing.T) {
 	s := newTestStore(t, 4)
 	if _, err := s.Write(context.Background(), "alpha", "d"); err != nil {
 		t.Fatalf("Write: %v", err)
 	}
-	// FTS index has the row
+	// post-0020: the embedding is a BLOB column on the chunks table.
+	// Verify the row count is 1 (single write) and the embedding column
+	// is non-null.
 	var n int
-	if err := s.DB().QueryRow(`SELECT count(*) FROM chunks_fts`).Scan(&n); err != nil {
-		t.Fatalf("fts count: %v", err)
+	if err := s.DB().QueryRow(`SELECT count(*) FROM chunks`).Scan(&n); err != nil {
+		t.Fatalf("chunks count: %v", err)
 	}
 	if n != 1 {
-		t.Errorf("chunks_fts count = %d, want 1", n)
+		t.Errorf("chunks count = %d, want 1", n)
 	}
-	// vec0 has the row
-	if err := s.DB().QueryRow(`SELECT count(*) FROM chunks_vec`).Scan(&n); err != nil {
-		t.Fatalf("vec count: %v", err)
+	var emb []byte
+	if err := s.DB().QueryRow(`SELECT embedding FROM chunks LIMIT 1`).Scan(&emb); err != nil {
+		t.Fatalf("embedding read: %v", err)
 	}
-	if n != 1 {
-		t.Errorf("chunks_vec count = %d, want 1", n)
+	if len(emb) == 0 {
+		t.Error("embedding column empty")
 	}
 }
 

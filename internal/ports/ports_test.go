@@ -1,10 +1,141 @@
+// Package ports — the architectural seam between core and adapters.
+//
+// In addition to the compile-time port assertions, this package owns a
+// regression guard that bans the prior SQL-stack dependencies from being
+// re-introduced as direct deps. Change 0019 + 0020 established that
+// Turso v0.2.2 is the only supported driver, and that the
+// sqlite-vec + ncruces pairing is broken (ABI break at v0.21+). This
+// test fails the build if either is brought back as a direct dep.
+//
+// Pattern after the internal/ports/leak_guard_test.go guard (T-1808).
 package ports
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
+
+// bannedDirectDeps is the list of SQL-stack packages that change 0020
+// explicitly removed. Banning them as direct deps is the durable form
+// of the "core depends on ports" rule, applied to the driver story.
+var bannedDirectDeps = []string{
+	"github.com/asg017/sqlite-vec-go-bindings",
+	"github.com/ncruces/go-sqlite3",
+}
+
+// TestNoBannedDirectDeps walks the repo's go.mod and fails if any
+// banned package is a direct (non-indirect) dependency. Run from the
+// repo root via `go test ./internal/ports/...`.
+func TestNoBannedDirectDeps(t *testing.T) {
+	root := findRepoRoot(t)
+	goMod := readFile(t, filepath.Join(root, "go.mod"))
+	requireDirect := false // the banned list is direct-only
+	for _, dep := range bannedDirectDeps {
+		// A direct line looks like:  github.com/... vX.Y.Z
+		// An indirect line is commented: // github.com/... vX.Y.Z
+		for _, line := range strings.Split(goMod, "\n") {
+			if !strings.Contains(line, dep) {
+				continue
+			}
+			trimmed := strings.TrimSpace(line)
+			// Indirect lines are commented out.
+			if strings.HasPrefix(trimmed, "//") {
+				continue
+			}
+			// Must be inside a require block (post-Go 1.17 modules).
+			if !requireDirect && !isInsideRequireBlock(goMod, line) {
+				continue
+			}
+			t.Errorf("banned direct dependency %q is in go.mod (change 0020 removed it). "+
+				"Use github.com/tursodatabase/turso-go (the canonical driver) "+
+				"instead — see openspec/changes/0020-turso-migration/tasks.md.",
+				dep)
+		}
+	}
+}
+
+// findRepoRoot walks up from the test process's CWD until it finds
+// a directory containing go.mod. Catches the common case of running
+// `go test ./...` from any subdirectory of the repo.
+func findRepoRoot(t *testing.T) string {
+	t.Helper()
+	dir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for {
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+			return dir
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			t.Fatal("could not find go.mod walking up from " + dir)
+		}
+		dir = parent
+	}
+}
+
+func readFile(t *testing.T, path string) string {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
+// isInsideRequireBlock returns true if the line is inside a
+// non-indirect `require` block. The format is two require blocks
+// in this repo's go.mod (a "direct" block followed by an `// indirect`
+// block); we treat anything in the first block as direct, anything in
+// the second as indirect. Implementation: the first `require` block
+// has no leading `//` for its members; the second is preceded by a
+// `// indirect` comment header.
+func isInsideRequireBlock(goMod, line string) bool {
+	// Locate the first two `require` keywords.
+	firstReq := strings.Index(goMod, "require (")
+	if firstReq < 0 {
+		return true // no require blocks; conservative true.
+	}
+	secondReq := strings.Index(goMod[firstReq+1:], "require (")
+	if secondReq < 0 {
+		// Only one require block: everything inside is direct.
+		end := strings.Index(goMod[firstReq:], ")")
+		if end < 0 {
+			return true
+		}
+		body := goMod[firstReq : firstReq+end]
+		return strings.Contains(body, line)
+	}
+	secondReq += firstReq + 1
+	// If the line is in the first block, it's direct.
+	firstEnd := strings.Index(goMod[firstReq:], ")")
+	if firstEnd < 0 {
+		return true
+	}
+	firstEnd += firstReq
+	if lineAtOffset(goMod, line) < firstEnd {
+		return true
+	}
+	// Otherwise it's in the second (or later) block — check if any
+	// intervening `// indirect` comment is present.
+	if strings.Contains(goMod[firstEnd:secondReq], "// indirect") {
+		return false
+	}
+	// No // indirect marker — second block is still a direct block?
+	// Conservative: treat as direct.
+	return true
+}
+
+func lineAtOffset(goMod, needle string) int {
+	return strings.Index(goMod, needle)
+}
+
+// --- existing port tests (compile-time assertions live in ports.go) ---
 
 // TestAllTenPortsAreDeclared is the T-004 acceptance test: every port named in
 // the design has a compile-time assertion below, so removing or breaking one

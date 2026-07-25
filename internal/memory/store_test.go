@@ -5,9 +5,11 @@ import (
 	"testing"
 )
 
-// TestOpenAndVecVersion is the T-040 acceptance test: the store opens on the
-// cgo-free ncruces driver with sqlite-vec embedded, and vec_version() resolves
-// (proving the vector extension is loaded into the same DB).
+// TestOpenAndVecVersion is the T-040 acceptance test, repurposed for
+// change 0020. The store opens on the cgo-free Turso driver (libturso
+// via purego), and VecVersion() returns a non-empty libturso version
+// (proving the driver actually loaded). On Turso v0.2.2 the version
+// query reads sqlite_version() since libturso doesn't ship vec_version().
 func TestOpenAndVecVersion(t *testing.T) {
 	s, err := Open(":memory:")
 	if err != nil {
@@ -130,11 +132,10 @@ func TestStoreMaxEntriesCapEvictsOldest(t *testing.T) {
 	}
 }
 
-// TestStoreMaxEntriesPrunesIndexes: prune must also delete from chunks_fts
-// and chunks_vec, otherwise Search returns phantom rowids (ids that no
-// longer exist in chunks but still score in the index). Without this,
-// the cap silently leaks index bloat and pollutes retrieval.
-func TestStoreMaxEntriesPrunesIndexes(t *testing.T) {
+// TestStoreMaxEntriesPrunesChunks: prune must also delete from chunks
+// (the only vector store post-0020 — FTS5 was dropped because Turso
+// v0.2.2 doesn't ship it). Otherwise Search returns phantom rowids.
+func TestStoreMaxEntriesPrunesChunks(t *testing.T) {
 	s, err := Open(":memory:")
 	if err != nil {
 		t.Fatalf("Open: %v", err)
@@ -148,13 +149,11 @@ func TestStoreMaxEntriesPrunesIndexes(t *testing.T) {
 			t.Fatalf("Write %d: %v", i, err)
 		}
 	}
-	for _, tbl := range []string{"chunks", "chunks_fts", "chunks_vec"} {
-		var n int
-		if err := s.DB().QueryRow(`SELECT COUNT(*) FROM ` + tbl).Scan(&n); err != nil {
-			t.Fatalf("count %s: %v", tbl, err)
-		}
-		if n != 2 {
-			t.Errorf("%s count = %d, want 2 (cap must prune all three tables)", tbl, n)
-		}
+	var n int
+	if err := s.DB().QueryRow(`SELECT COUNT(*) FROM chunks`).Scan(&n); err != nil {
+		t.Fatalf("count chunks: %v", err)
+	}
+	if n != 2 {
+		t.Errorf("chunks count = %d, want 2 (cap must prune)", n)
 	}
 }
