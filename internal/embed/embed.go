@@ -11,9 +11,15 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
+	"time"
 )
 
-const DefaultBaseURL = "https://api.openai.com/v1"
+const (
+	DefaultBaseURL = "https://api.openai.com/v1"
+	// DefaultTimeout bounds a single Embed call when no caller-supplied
+	// http.Client is set.
+	DefaultTimeout = 30 * time.Second
+)
 
 // Embedder turns text into fixed-dimension float32 vectors. Dim() returns the
 // pinned dimension (0 before the first successful Embed).
@@ -28,6 +34,10 @@ type Local struct {
 	BaseURL string
 	APIKey  string
 	Model   string
+	// Timeout bounds a single Embed call when HTTP is nil. Zero means
+	// DefaultTimeout. Ignored when HTTP is non-nil (the caller's client
+	// wins, including its timeout).
+	Timeout time.Duration
 	HTTP    *http.Client
 
 	mu  sync.Mutex
@@ -53,7 +63,11 @@ func (l *Local) Embed(ctx context.Context, texts []string) ([][]float32, error) 
 
 	client := l.HTTP
 	if client == nil {
-		client = http.DefaultClient
+		to := l.Timeout
+		if to <= 0 {
+			to = DefaultTimeout
+		}
+		client = &http.Client{Timeout: to}
 	}
 	resp, err := client.Do(req)
 	if err != nil {

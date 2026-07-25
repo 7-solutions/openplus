@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 // embeddingsFixture returns count embeddings of the given dim.
@@ -101,6 +102,37 @@ func TestEmbedErrorsOnHTTPFailure(t *testing.T) {
 	l := &Local{BaseURL: srv.URL, APIKey: "bad", Model: "m"}
 	if _, err := l.Embed(context.Background(), []string{"x"}); err == nil {
 		t.Fatal("want error on 401")
+	}
+}
+
+// --- Change 0004 / T-403: a hanging server is bounded by Embedder.Timeout ---
+//
+// With no caller-supplied http.Client, Local falls back to its own
+// timeout-bounded client. Today it falls back to http.DefaultClient
+// (no timeout), so this test is RED until T-404 lands.
+
+func TestEmbedTimeoutApplied(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Sleep longer than the client's timeout. The client will give
+		// up and return a timeout error; the server wakes up shortly
+		// after and returns 200 — which the client discards.
+		time.Sleep(2 * time.Second)
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(srv.Close)
+
+	// No HTTP field set — relies on the fallback client honoring Timeout.
+	l := &Local{BaseURL: srv.URL, APIKey: "k", Model: "m", Timeout: 50 * time.Millisecond}
+
+	start := time.Now()
+	_, err := l.Embed(context.Background(), []string{"x"})
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Fatal("want timeout error")
+	}
+	if elapsed > time.Second {
+		t.Fatalf("Embed took %v, want < 1s (timeout should have fired near 50ms)", elapsed)
 	}
 }
 

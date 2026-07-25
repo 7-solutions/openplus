@@ -214,6 +214,7 @@ func (s *Session) assembleMemory() error {
 		BaseURL: s.Config.Embedder.BaseURL,
 		APIKey:  s.Config.Embedder.APIKey,
 		Model:   s.Config.Embedder.Model,
+		Timeout: s.Config.Embedder.Timeout,
 	}
 
 	path := s.Config.Memory.Path

@@ -13,6 +13,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"time"
 )
 
 // Config is the parsed, env-expanded configuration.
@@ -49,6 +50,9 @@ type Embedder struct {
 	Model   string
 	BaseURL string
 	APIKey  string
+	// Timeout bounds a single Embed call when no caller-supplied http.Client
+	// is set. Zero means embed.DefaultTimeout (30s).
+	Timeout time.Duration
 }
 
 // Configured reports whether enough is set to embed. A model is required: it
@@ -143,6 +147,7 @@ func Load(path string) (*Config, error) {
 			Model:   doc.Embedder.Model,
 			BaseURL: expandEnv(doc.Embedder.BaseURL),
 			APIKey:  expandEnv(doc.Embedder.APIKey),
+			Timeout: doc.Embedder.Timeout,
 		},
 		Memory: Memory{Path: doc.Memory.Path},
 		Context: Context{
@@ -202,9 +207,10 @@ type rawConfig struct {
 	Provider     map[string]rawProvider     `json:"provider"`
 	Permission   map[string]json.RawMessage `json:"permission"`
 	Embedder     struct {
-		Model   string `json:"model"`
-		BaseURL string `json:"baseURL"`
-		APIKey  string `json:"apiKey"`
+		Model   string        `json:"model"`
+		BaseURL string        `json:"baseURL"`
+		APIKey  string        `json:"apiKey"`
+		Timeout time.Duration `json:"timeout"`
 	} `json:"embedder"`
 	Memory struct {
 		Path string `json:"path"`
