@@ -1,106 +1,215 @@
-# OpenPlus — OpenSpec Handoff Pack
+<h1 align="center">OpenPlus</h1>
 
-Pure-Go, OpenCode-class coding agent targeting the **MiMoCode** feature milestone.
-Built on **Crush** (Go + Charm), config-compatible with the OpenCode surface, model
-layer speaking **both** Anthropic Messages and OpenAI-compatible endpoints.
+<p align="center">
+  A pure-Go, terminal-native coding agent.<br>
+  Anthropic and OpenAI-compatible models · persistent memory · LSP code intelligence · MCP tools.
+</p>
 
-## What the three artifacts are
-- **ADR** — `docs/adr/0001..0008` (`0018-audit.md` is the post-foundation audit snapshot) —
-  the settled decisions.
-- **SPEC** — `openspec/specs/<capability>/spec.md` — target truth in Requirement/Scenario
-  form for: agent-loop, provider, memory, skills, compose, orchestration, ports.
-- **BACKLOG** — `openspec/changes/<NNNN>-<slug>/tasks.md` — T-### vertical slices,
-  milestone-ordered, plus the deferred list. Active change: `0018-provider-port-extraction`.
+<p align="center">
+  <a href="#install"><img alt="version" src="https://img.shields.io/badge/version-v0.0.1--alpha-orange"></a>
+  <a href="#status"><img alt="status" src="https://img.shields.io/badge/status-alpha-red"></a>
+  <img alt="go" src="https://img.shields.io/badge/go-1.26-00ADD8">
+  <img alt="platforms" src="https://img.shields.io/badge/platforms-linux%20%7C%20macos%20%7C%20wsl2-lightgrey">
+  <a href="LICENSE"><img alt="license" src="https://img.shields.io/badge/license-Apache--2.0-blue"></a>
+</p>
 
-## How each agent consumes this
-| Agent | Reads | Notes |
-|-------|-------|-------|
-| **OpenCode** | `AGENTS.md` (canonical) + `opencode.json` + `.opencode/agent/*` + `.opencode/command/*` | `/openspec <id>` scaffolds a change |
-| **Codex** | `AGENTS.md` | project rules via AGENTS.md; model/provider via your `~/.codex` config |
-| **Claude Code** | `CLAUDE.md` → `AGENTS.md` + `.claude/skills/openplus-build/SKILL.md` | skill triggers the build gate |
+---
 
-## Start here
-1. Read `AGENTS.md` (SSOT: gate, ports, ADR index, hard rules, deferred list).
-2. Read `openspec/changes/0001-foundation/{proposal,design,tasks}.md` for the foundation.
-3. Read `openspec/changes/0018-provider-port-extraction/` for the current architecture
-   (the package-level split between `internal/ports/` and `internal/provider/`).
-4. Approve the change (house Gate 1) if not already done.
+> **Alpha.** `v0.0.1-alpha` is the first tagged build. The architecture is settled and
+> the test suite is green, but interfaces may still move and it has seen little
+> real-world mileage. See [Status](#status) for what is proven and what is not.
 
-## Architecture (ports & adapters — hexagonal)
-
-The core depends on **ports**, never on concrete adapters. After change 0018, the
-canonical home of every port's interface AND its neutral types is `internal/ports/`:
-
-- **`internal/ports/`** — `Provider`, `Embedder`, `MemoryStore`, `Tool`, `SkillIndex`,
-  `Tokenizer`, `Budgeter`, `Checkpointer`, `PolicyGate`, `Workflow`. Plus the
-  provider-neutral model types (`Request`, `Event`, `Message`, `Block`, `ToolCall`,
-  `ToolSchema`, `Usage`, `Role`, `BlockKind`, `EventKind`) and the scripted test
-  fake (`internal/ports/providerfake`).
-- **`internal/provider/`** — adapter-only. Anthropic Messages, OpenAI-compatible
-  Chat Completions, prefix-select, and the SSE helper. Adapter packages implement
-  `ports.Provider`; the core never imports them.
-- **Leak guard** — `internal/ports/leak_guard_test.go` fails the build if any core
-  package imports `internal/provider/`. Encodes the AGENTS.md hard rule
-  "Core depends on ports, not on adapters — at the package level."
-
-## Scaffold status (this pack includes runnable Go source)
-
-**Currently shipped** (26 packages, `go test ./...` green, `CGO_ENABLED=0` build clean):
-
-- `internal/ports/` — all 10 port interfaces + neutral model types + `providerfake.Fake`.
-- `internal/ports/providerfake/` — deterministic scripted provider for the loop.
-- `internal/agent/` — the core turn loop (`internal/agent/loop.go` + `loop_test.go`).
-- `internal/provider/` — Anthropic Messages + OpenAI-compatible Chat Completions
-  adapters + prefix-select, all behind `ports.Provider`. Stdlib SSE frame reader.
-- `internal/tool/` — `Tool` port + builtins (`read`, `write`, `edit`, `bash`, `glob`, `grep`).
-- `internal/policy/` — `PolicyGate` (allow/ask/deny + Prompting rules).
-- `internal/memory/` + `internal/embed/` — ncruces/go-sqlite3 cgo-free + sqlite-vec,
-  hybrid FTS5+vec0 with RRF fusion; local OpenAI-compatible embedder.
-- `internal/contextmgr/` — tokenizer, budgeter, checkpointer, task tree.
-- `internal/skills/` — `SkillIndex` discovery + BM25 ranking.
-- `internal/orchestrate/` — subagents, workflows, goal-judge, parallel sampler.
-- `internal/compose/` — spec→ship phase machine.
-- `internal/runtime/` — wires ports → adapters; powers `cmd/openplus`.
-- `internal/tui/` — Bubble Tea front-end (Crush base).
-- `internal/config/` — `opencode.json` + `AGENTS.md` loader.
-- `internal/jsworkflow/` — goja `.js` workflow adapter (behind the Workflow port).
-- `internal/mcp/` — MCP server connection + tool proxy (behind the Tool port).
-- `internal/coordinate/` — inter-agent symbol/exclusive lock coordination.
-- `internal/memo/` + `internal/improve/` — `/dream` (trace mining) + `/distill`
-  (repeated-workflow synthesis).
-- `internal/diff/` + `internal/glob/` + `internal/symbols/` — utility packages.
-
-Verify before trusting:
+## Install
 
 ```bash
-go build ./...
-CGO_ENABLED=0 go build ./...
-go test ./...
-go run ./cmd/openplus --fake -C $(mktemp -d) -p "say hello"   # end-to-end smoke
+curl -fsSL https://raw.githubusercontent.com/7-solutions/openplus/main/scripts/install.sh | sh
 ```
 
-## Layout
+Works on **Linux, macOS, and WSL2** (amd64 and arm64). The script detects your
+platform, verifies the SHA-256 checksum, and installs to `~/.local/bin` (or
+`/usr/local/bin` when writable).
+
+<details>
+<summary>Other ways to install</summary>
+
+```bash
+# Pin a version
+OPENPLUS_VERSION=v0.0.1-alpha curl -fsSL https://raw.githubusercontent.com/7-solutions/openplus/main/scripts/install.sh | sh
+
+# Choose the directory
+OPENPLUS_INSTALL=$HOME/bin curl -fsSL https://raw.githubusercontent.com/7-solutions/openplus/main/scripts/install.sh | sh
+
+# From source
+git clone https://github.com/7-solutions/openplus && cd openplus
+CGO_ENABLED=0 go build -o openplus ./cmd/openplus
+```
+
+> `go install` does not work yet: the module declares
+> `github.com/7solutions/openplus` (no hyphen) while the repository lives at
+> `github.com/7-solutions/openplus`, so the Go proxy cannot resolve it. Fixing it
+> means renaming the module across every import — tracked as its own change.
+
+**Native Windows is not supported.** Use WSL2 and install from inside your Linux
+distribution.
+
+</details>
+
+## Quickstart
+
+```bash
+# No API key needed — the scripted fake provider proves the wiring
+openplus --fake -p "say hello"
+
+# With a real model
+export ANTHROPIC_API_KEY=sk-ant-...
+openplus -p "explain the error handling in internal/agent/loop.go"
+
+# Interactive TUI
+openplus
+```
+
+## Configure
+
+OpenPlus reads `opencode.json` from your project root — the same surface OpenCode
+uses — plus `AGENTS.md` for project instructions.
+
+```jsonc
+{
+  "model": "anthropic/claude-sonnet-5",
+  "instructions": ["AGENTS.md"],
+
+  "provider": {
+    "anthropic": { "options": { "apiKey": "{env:ANTHROPIC_API_KEY}" } },
+    "local": {
+      "options": { "baseURL": "http://localhost:11434/v1", "apiKey": "ollama" },
+      "models": { "qwen2.5-coder": { "name": "Qwen2.5 Coder" } }
+    }
+  },
+
+  "permission": { "bash": "ask", "write": "ask" },
+
+  // Code intelligence — opt-in, you supply the server binary
+  "lsp": {
+    "enabled": true,
+    "servers": { ".go": { "command": "gopls" } }
+  }
+}
+```
+
+Full reference: **[docs/configuration.md](docs/configuration.md)**.
+
+## What it does
+
+| | |
+|---|---|
+| **Models** | Anthropic Messages and any OpenAI-compatible endpoint (incl. Ollama), first-class |
+| **Tools** | `read` `write` `edit` `bash` `glob` `grep`, all behind a permission gate |
+| **Memory** | Local vector + FTS5 hybrid search with tunable RRF fusion; never leaves your machine |
+| **Code intelligence** | LSP: diagnostics, hover, definition, symbols, references — diagnostics fed back automatically after edits |
+| **MCP** | Connect any MCP server; its tools join the registry namespaced |
+| **Docs** | Context7 wired as a default docs source, so the model reads current library docs |
+| **Orchestration** | Parallel subagents in isolated git worktrees, JS workflows, best-of-N with a judge |
+| **Self-improvement** | `/dream` mines session traces into memory; `/distill` turns repeated work into skills |
+
+### LSP in one minute
+
+```bash
+go install golang.org/x/tools/gopls@latest
+```
+
+```jsonc
+{ "lsp": { "enabled": true, "servers": { ".go": { "command": "gopls" } } } }
+```
+
+Now the agent sees compiler errors in files it edits, without being asked, and can
+call `lsp_hover`, `lsp_definition`, `lsp_symbols`, and `lsp_references` directly.
+Servers start lazily on first use; a missing binary is a warning, never a crash.
+
+## Commands
+
+`/help` lists everything. Highlights:
+
+| Command | Does |
+|---|---|
+| `/docs <library>` | Fetch current library documentation (Context7) |
+| `/compose <feature>` | Spec → implement → verify → review pipeline |
+| `/subagents <prompts>` | Run work in parallel, isolated git worktrees |
+| `/max [n] <prompt>` | Best-of-N sampling with a judge |
+| `/dream` · `/distill` | Mine this session into durable memory or a reusable skill |
+| `/workflow <name>` | Run a Go or JavaScript workflow |
+| `/theme` | Switch color theme (color-vision aware) |
+
+Full list: **[docs/commands.md](docs/commands.md)**.
+
+## Status
+
+**Alpha.** Honest accounting of where this stands:
+
+**Proven**
+- 27 packages, `go test ./...` green, `-race` clean
+- `CGO_ENABLED=0` build gate enforced in CI
+- Architecture guarded by regression tests, not convention — six of them, including
+  two that fail the build if a wire type crosses a port boundary
+- LSP verified end to end against a real `gopls`
+
+**Not yet proven**
+- Little real-world mileage. Interfaces may move before `v0.1.0`.
+- **The binary links glibc dynamically**, despite `CGO_ENABLED=0`: the Turso driver
+  reaches libturso through `purego`, which needs the dynamic loader. It is portable
+  across mainstream glibc distributions but **will not run on stock Alpine/musl**.
+  The "single static binary" goal is not currently met.
+- macOS and arm64 builds are cross-compiled and CI-tested, but have had no manual
+  soak testing.
+
+**Not built** (deliberately deferred, each needs its own decision record): voice input,
+MCP marketplace, web/share UI, hosted multi-tenant mode, LSP server auto-install.
+
+## Architecture
+
+Ports and adapters, enforced rather than encouraged. The core depends on eleven port
+interfaces in `internal/ports/`; every external system is an adapter behind one.
 
 ```
-AGENTS.md  CLAUDE.md  opencode.json  README.md
-docs/adr/0001..0008-*.md  0018-audit.md
-openspec/project.md
-openspec/specs/{agent-loop,provider,memory,skills,compose,orchestration,ports}/spec.md
-openspec/changes/
-  0001-foundation/                    # M0–M9 baseline (T-001..T-091)
-  0002..0017-*/                       # capability changes
-  0018-provider-port-extraction/      # post-foundation architecture (T-1800..T-1811)
-.opencode/{agent/{build,plan}.md, command/openspec.md}
-.claude/skills/openplus-build/SKILL.md
-internal/
-  ports/                              # canonical home of every port + neutral types
-    providerfake/                     #   the scripted test Fake
-  provider/                           # adapter-only; core does not import this
-    anthropic/                        # Anthropic Messages adapter
-    openaicompat/                     # OpenAI-compatible Chat Completions adapter
-    select/                           # prefix-based adapter selection
-    sse.go                            #   SSE frame reader (used by adapters)
-  agent/  tool/  policy/  memory/  embed/  contextmgr/  skills/  orchestrate/
-  compose/  runtime/  tui/  config/  jsworkflow/  mcp/  coordinate/  memo/  improve/
-  diff/  glob/  symbols/
+internal/ports/        the eleven seams + neutral types (no wire type may cross)
+  providerfake/        scripted provider for tests
+internal/provider/     adapter-only: anthropic · openaicompat · select · sse
+internal/lsp/          LSP adapter: client · manager · wire  (only place LSP is known)
+internal/memory/       Turso vector + modernc FTS5 shadow, RRF fusion
+internal/agent/        the turn loop
+internal/runtime/      composition root: ports → adapters
+internal/tui/          Bubble Tea front-end
 ```
+
+Two hard rules carry regression tests that fail the build when violated:
+
+- **Core depends on ports, not adapters** — `internal/ports/leak_guard_test.go`
+- **No wire type crosses a seam** — `internal/ports/lsp_leak_guard_test.go`
+
+Decisions live in [`docs/adr/`](docs/adr/); specs and change history in
+[`openspec/`](openspec/). Start with [`AGENTS.md`](AGENTS.md) — it is the single
+source of truth for how this project is built.
+
+## Contributing
+
+The build gate is mandatory and spec-first: an approved OpenSpec change
+(`openspec/changes/<id>/`) exists before any code, tests are written red first, and
+every architectural rule ships with the test that enforces it. Read
+[`AGENTS.md`](AGENTS.md) before starting.
+
+```bash
+go build ./... && CGO_ENABLED=0 go build ./...
+go test ./... && go test -race ./internal/...
+go vet ./...
+```
+
+## Documentation
+
+- **[Installation](docs/install.md)** — every method, upgrade, uninstall, troubleshooting
+- **[Configuration](docs/configuration.md)** — full `opencode.json` reference
+- **[Commands](docs/commands.md)** — every slash command
+- **[Feature matrix](docs/feature-matrix.md)** — OpenPlus vs OpenCode vs MiMoCode
+- **[ADRs](docs/adr/)** — why the architecture is what it is
+
+## License
+
+[Apache License 2.0](LICENSE) — Copyright 2026 7 Solutions.

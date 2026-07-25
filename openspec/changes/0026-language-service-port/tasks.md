@@ -163,16 +163,25 @@
       `go vet ./...` all clean; `go test -count=1 ./...` **27 pkgs green, 0 FAIL**;
       `-race` clean on lsp/runtime/ports/memory/orchestrate; all six guards pass
       (provider leak ×2, banned deps, LSP leak ×2, eleven-port count).
-- [~] T-2626 Manual smoke (opt-in, real server). **BLOCKED: `gopls` is not installed
-      on this machine** (`which gopls` → not found). Installing it is a toolchain
-      download, which is the user's call, so it was not done unilaterally. Everything
-      it would cover is exercised by the pipe-backed fake server in
-      `internal/lsp/client_test.go` (framing, handshake, pushed diagnostics, all
-      request surfaces) — but the real-server path is genuinely unverified end to end.
-      Run before relying on LSP in anger:
-      `go install golang.org/x/tools/gopls@latest`, add
-      `"lsp":{"enabled":true,"servers":{".go":{"command":"gopls"}}}` to
-      `opencode.json`, break a Go file, confirm the diagnostic reaches the model.
+- [x] T-2626 Manual smoke against a **real gopls v0.23.0** (installed with
+      `go install golang.org/x/tools/gopls@latest` on user instruction). Drove
+      `lsp.Manager` against a scratch module containing a deliberate `undefinedFunc()`
+      call. Every surface verified end to end:
+
+      ```
+      DIAG       main.go:12:2 error: undefined: undefinedFunc
+      HOVER      "func Greet(name string) string\nGreet returns a greeting for name."
+      DEFINITION [{Path:main.go Line:6 Column:6}]
+      SYMBOLS    [{Greet func L6} {main func L10}]
+      ```
+
+      This confirms against a real server what the fake could only assert:
+      Content-Length framing, the initialize handshake, **asynchronously pushed
+      diagnostics**, the 0-based→1-based position conversion (the error genuinely is
+      at line 12 col 2), root-relative paths, and LSP symbol-kind 12 → `"func"`.
+      No warnings; clean shutdown. Elapsed 0.64s.
+      The smoke test itself was scratch and is not committed — it needs a real gopls
+      on PATH, which unit tests must never require.
 - [x] T-2627 Commits on `feat/0026-language-service-port`. **Deviation:** three
       commits, not five. `internal/runtime/assemble.go` carries both the M3 tool
       wiring and the M4 diagnostics state, so a strict five-way split would need
