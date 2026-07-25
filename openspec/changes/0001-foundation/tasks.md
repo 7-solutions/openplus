@@ -41,11 +41,11 @@
 - [x] T-031 Diff view for edits; permission prompt component.
 
 ## M4 — Memory (ADR-0003, ADR-0004)
-- [ ] T-040 ncruces/go-sqlite3 wiring + sqlite-vec (ncruces) load; `vec_version()` test.
-- [ ] T-041 Embedder port + local OpenAI-compatible adapter; dim pinning.
-- [ ] T-042 Hybrid store: FTS5 + vec0 tables; chunk + embed on write.
-- [ ] T-043 RRF fusion + top-k retrieval; golden ranking tests.
-- [ ] T-044 MEMORY.md / notes.md / tasks/<id>/progress.md read-write + resume inject.
+- [x] T-040 ncruces/go-sqlite3 wiring + sqlite-vec (ncruces) load; `vec_version()` test.
+- [x] T-041 Embedder port + local OpenAI-compatible adapter; dim pinning.
+- [x] T-042 Hybrid store: FTS5 + vec0 tables; chunk + embed on write.
+- [x] T-043 RRF fusion + top-k retrieval; golden ranking tests.
+- [x] T-044 MEMORY.md / notes.md / tasks/<id>/progress.md read-write + resume inject.
 
 ## M5 — Skills (ADR-0002)
 - [ ] T-050 SkillIndex discovery + override scan order.
