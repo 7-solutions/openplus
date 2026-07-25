@@ -108,6 +108,38 @@ download_stdout() {
     fi
 }
 
+# api_get fetches a GitHub API URL, sending a token when one is available.
+# Unauthenticated calls are limited to 60/hour per IP, which CI runners on
+# shared cloud addresses exhaust routinely — the resulting 403 looks exactly
+# like "no release exists" unless it is handled apart.
+api_get() {
+    url=$1
+    token="${GITHUB_TOKEN:-${GH_TOKEN:-}}"
+    if command -v curl >/dev/null 2>&1; then
+        if [ -n "$token" ]; then
+            curl -fsSL -H "Authorization: Bearer $token" "$url"
+        else
+            curl -fsSL "$url"
+        fi
+    else
+        if [ -n "$token" ]; then
+            wget -qO- --header="Authorization: Bearer $token" "$url"
+        else
+            wget -qO- "$url"
+        fi
+    fi
+}
+
+# rate_limited reports whether the API is currently refusing us for quota.
+# Only called on the failure path, so it costs nothing in the normal case.
+rate_limited() {
+    command -v curl >/dev/null 2>&1 || return 1
+    curl -fsSL "https://api.github.com/rate_limit" 2>/dev/null \
+        | tr ',' '\n' \
+        | grep -m1 '"remaining"' \
+        | grep -q ': *0'
+}
+
 # --- resolve the version ------------------------------------------------------
 tag_from_json() {
     # Pull the first "tag_name" out of an API response without requiring jq.
@@ -126,18 +158,32 @@ resolve_version() {
     # it, and 404s when every release is one. While OpenPlus is pre-1.0 that is
     # the normal case, so fall back to the newest published release. Once a
     # stable release exists this prefers it, which is the behavior we want.
-    VERSION=$(download_stdout "https://api.github.com/repos/${REPO}/releases/latest" 2>/dev/null | tag_from_json || true)
+    VERSION=$(api_get "https://api.github.com/repos/${REPO}/releases/latest" 2>/dev/null | tag_from_json || true)
 
     if [ -z "$VERSION" ]; then
-        VERSION=$(download_stdout "https://api.github.com/repos/${REPO}/releases" 2>/dev/null \
-            | grep -v '"draft": true' \
+        VERSION=$(api_get "https://api.github.com/repos/${REPO}/releases" 2>/dev/null \
+            | grep -v '"draft":[[:space:]]*true' \
             | tag_from_json || true)
         [ -n "$VERSION" ] && warn "no stable release yet; installing prerelease $VERSION"
     fi
 
-    [ -n "$VERSION" ] || die "could not determine a release to install.
+    if [ -z "$VERSION" ]; then
+        # Distinguish the two ways this fails. Reporting "no release exists"
+        # when the truth is "you are rate limited" sends people looking in
+        # entirely the wrong place.
+        if rate_limited; then
+            die "the GitHub API is rate-limiting this machine (60 requests/hour for anonymous callers, shared per IP — CI runners hit this routinely).
+
+Either wait for the quota to reset, install a known version directly:
+  OPENPLUS_VERSION=v0.0.1-alpha.1 curl -fsSL https://raw.githubusercontent.com/${REPO}/main/scripts/install.sh | sh
+
+or authenticate:
+  GITHUB_TOKEN=<token> curl -fsSL https://raw.githubusercontent.com/${REPO}/main/scripts/install.sh | sh"
+        fi
+        die "could not determine a release to install.
 Set an explicit version and retry:
-  OPENPLUS_VERSION=v0.0.1-alpha curl -fsSL https://raw.githubusercontent.com/${REPO}/main/scripts/install.sh | sh"
+  OPENPLUS_VERSION=v0.0.1-alpha.1 curl -fsSL https://raw.githubusercontent.com/${REPO}/main/scripts/install.sh | sh"
+    fi
 }
 
 # --- choose an install directory ----------------------------------------------
