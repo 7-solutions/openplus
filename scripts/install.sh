@@ -79,17 +79,35 @@ download_stdout() {
 }
 
 # --- resolve the version ------------------------------------------------------
+tag_from_json() {
+    # Pull the first "tag_name" out of an API response without requiring jq.
+    grep -m1 '"tag_name"' \
+        | sed 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/'
+}
+
 resolve_version() {
     if [ -n "${OPENPLUS_VERSION:-}" ]; then
         VERSION="$OPENPLUS_VERSION"
         return
     fi
     info "resolving latest release"
-    # Parse the tag out of the releases API without requiring jq.
-    VERSION=$(download_stdout "https://api.github.com/repos/${REPO}/releases/latest" \
-        | grep -m1 '"tag_name"' \
-        | sed 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
-    [ -n "$VERSION" ] || die "could not determine the latest release. Set OPENPLUS_VERSION=<tag> and retry."
+
+    # /releases/latest is the stable channel: GitHub excludes prereleases from
+    # it, and 404s when every release is one. While OpenPlus is pre-1.0 that is
+    # the normal case, so fall back to the newest published release. Once a
+    # stable release exists this prefers it, which is the behavior we want.
+    VERSION=$(download_stdout "https://api.github.com/repos/${REPO}/releases/latest" 2>/dev/null | tag_from_json || true)
+
+    if [ -z "$VERSION" ]; then
+        VERSION=$(download_stdout "https://api.github.com/repos/${REPO}/releases" 2>/dev/null \
+            | grep -v '"draft": true' \
+            | tag_from_json || true)
+        [ -n "$VERSION" ] && warn "no stable release yet; installing prerelease $VERSION"
+    fi
+
+    [ -n "$VERSION" ] || die "could not determine a release to install.
+Set an explicit version and retry:
+  OPENPLUS_VERSION=v0.0.1-alpha curl -fsSL https://raw.githubusercontent.com/${REPO}/main/scripts/install.sh | sh"
 }
 
 # --- choose an install directory ----------------------------------------------
