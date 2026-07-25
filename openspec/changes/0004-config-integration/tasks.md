@@ -102,22 +102,29 @@
       Done — 3330c35.
 
 ## D — Integration tests
-- [ ] T-430 RED `TestIntegrationMemoryRoundTripAcrossSessions`: write via
+- [x] T-430 RED `TestIntegrationMemoryRoundTripAcrossSessions`: write via
       `s1.Run`, construct `s2` against the same path, `s2.Run` with a
       prompt whose embedding-relevant query term matches the prior
       exchange; assert the retrieval surfaces it via `s2.AssembleContext`.
-- [ ] T-431 RED `TestIntegrationPermissionDenyStopsExecution`: configure
+      Done — 9bca4e1. Note: cross-session Search needs a warmup Write
+      in session B to pin the embedding dim (real production behavior,
+      not a test-only quirk).
+- [x] T-431 RED `TestIntegrationPermissionDenyStopsExecution`: configure
       `Permission.Tools["bash"] = "deny"`, drive `s.Run` with a scripted
       provider that issues a bash tool call, assert the call is rejected
       and the agent reports it without invoking the tool.
-- [ ] T-432 RED `TestIntegrationCredentialMissingWrapsToExit2`: assemble
+      Done — 9bca4e1.
+- [x] T-432 RED `TestIntegrationCredentialMissingWrapsToExit2`: assemble
       against a remote provider with no apiKey; assert
       `errors.Is(err, runtime.ErrMissingCredential)` and that
       `exitCode(err) == 2`.
-- [ ] T-433 RED `TestIntegrationFakeSmokeEndToEnd`: full path
+      Done — 9bca4e1 (errors.Is half here; exit-2 half pinned at
+      cmd/openplus/main_test.go TestMainExitCodeMissingCredential).
+- [x] T-433 RED `TestIntegrationFakeSmokeEndToEnd`: full path
       `Assemble(tempRoot, Options{Fake:true}) → Run("hi") → Close`. Assert
       returned history has at least one user and one assistant message and
       no error.
+      Done — 9bca4e1.
 
 ## Verification (Gate 5 — before declaring 0004 done)
 - [ ] `go build ./...` clean.
