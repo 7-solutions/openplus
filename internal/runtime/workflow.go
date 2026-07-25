@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/7solutions/openplus/internal/agent"
+	"github.com/7solutions/openplus/internal/jsworkflow"
 	"github.com/7solutions/openplus/internal/orchestrate"
 	"github.com/7solutions/openplus/internal/provider"
 )
@@ -118,12 +119,26 @@ func (s *Session) cmdWorkflows(_ string) (string, error) {
 	return b.String(), nil
 }
 
-// cmdWorkflow runs a registered workflow and returns its report.
+// cmdWorkflow runs a registered workflow and returns its report. With `load
+// <path>` it compiles a `.js` workflow file and registers it under its declared
+// name (ADR-0009), after which `/workflow <name>` runs it through this same path.
 func (s *Session) cmdWorkflow(args string) (string, error) {
-	name := strings.TrimSpace(args)
-	if name == "" {
-		return "", fmt.Errorf("runtime: /workflow needs a name; try /workflows to list them")
+	args = strings.TrimSpace(args)
+	if args == "" {
+		return "", fmt.Errorf("runtime: /workflow needs a name or 'load <path>'; try /workflows to list them")
 	}
+
+	// load <path> — compile a JS workflow into the registry. Branching here (not
+	// as a separate command) keeps one workflow verb and one help line.
+	if args == "load" || strings.HasPrefix(args, "load ") {
+		path := strings.TrimSpace(strings.TrimPrefix(args, "load"))
+		if path == "" {
+			return "", fmt.Errorf("runtime: /workflow load needs a path")
+		}
+		return s.loadWorkflow(path)
+	}
+
+	name := args
 	wf, ok := s.Workflows[name]
 	if !ok {
 		return "", fmt.Errorf("runtime: no workflow named %q; registered: %s",
@@ -136,4 +151,24 @@ func (s *Session) cmdWorkflow(args string) (string, error) {
 		return "", fmt.Errorf("%w\n\n%s", err, rep.String())
 	}
 	return rep.String(), nil
+}
+
+// loadWorkflow compiles a `.js` workflow file and registers it under its declared
+// name. It refuses to shadow an existing name — silently replacing a built-in or
+// a previously loaded workflow is the wrong default.
+func (s *Session) loadWorkflow(path string) (string, error) {
+	c, err := jsworkflow.LoadFile(path)
+	if err != nil {
+		return "", err
+	}
+	if s.Workflows == nil {
+		s.Workflows = map[string]orchestrate.Workflow{}
+	}
+	if _, exists := s.Workflows[c.Name]; exists {
+		return "", fmt.Errorf("runtime: workflow %q already registered; pick a different name in %s",
+			c.Name, path)
+	}
+	s.Workflows[c.Name] = c.Run
+	return fmt.Sprintf("loaded workflow %q (%d phase(s), maxRetries=%d) from %s",
+		c.Name, len(c.Run.Phases), c.Run.MaxRetries, path), nil
 }

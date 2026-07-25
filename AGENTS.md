@@ -35,6 +35,7 @@ Checkpointer · PolicyGate · Workflow. Layout is in
 - ADR-0006 Go-native workflow engine (goja deferred)
 - ADR-0007 permission gate as control-plane ES256 seam
 - ADR-0008 context budgeter / tokenizer / reconstruction
+- ADR-0009 JS workflow adapter — goja trigger fired (behind the Workflow port)
 
 ## Hard rules
 - **Pure Go / cgo-free.** No cgo in the default build (that is why ncruces+wazero, not
@@ -47,8 +48,9 @@ Checkpointer · PolicyGate · Workflow. Layout is in
 
 ## Refuse in v1 (recognize and decline — backlog, each needs its ADR trigger)
 Voice/ASR · Max Mode (best-of-N + judge) · MCP marketplace · web/share UI · hosted
-multi-tenant server mode · goja `.js` workflow compatibility. If a task seems to need
-one, **stop and flag it** — the trigger has not fired.
+multi-tenant server mode. If a task seems to need one, **stop and flag it** — the
+trigger has not fired. (goja `.js` workflow compatibility was on this list; change
+0014 shipped it behind `/workflow load` — ADR-0009.)
 
 ## Self-check before "done"
 - [ ] Approved OpenSpec PLAN + SPEC + TASKS existed before code

@@ -97,7 +97,7 @@ var builtinCommands = map[string]Command{
 		Run:     (*Session).cmdSubagents,
 	},
 	"workflow": {
-		Name: "workflow", Usage: "/workflow <name>", Summary: "run a registered workflow",
+		Name: "workflow", Usage: "/workflow <name> | load <path>", Summary: "run a registered workflow, or load a .js workflow file",
 		Run: (*Session).cmdWorkflow,
 	},
 	"workflows": {
