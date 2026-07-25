@@ -236,3 +236,27 @@ func TestTiktokenInitRespectsExistingCacheDir(t *testing.T) {
 
 // compile-time: Tiktoken satisfies Tokenizer.
 var _ Tokenizer = (*Tiktoken)(nil)
+
+// TestTiktokenOfflineBuildSeparation: the offline loader must NOT be
+// pulled into the default build. This is a build-time property — the
+// only way to check it is by inspecting the package's source files for
+// the build tag. If a future refactor removes the //go:build offline
+// constraint, the default build will start pulling tiktoken-go-loader.
+//
+// RED if a future change removes the build tag or adds a default-build
+// reference to tiktoken-go-loader. The test passes today because the
+// default build does not compile tiktoken_offline.go (the file is
+// gated by the offline tag).
+func TestTiktokenOfflineBuildSeparation(t *testing.T) {
+	data, err := os.ReadFile("tiktoken_offline.go")
+	if err != nil {
+		t.Fatalf("read tiktoken_offline.go: %v", err)
+	}
+	src := string(data)
+	if !strings.Contains(src, "//go:build offline") {
+		t.Errorf("tiktoken_offline.go missing //go:build offline tag; the offline loader would now compile into the default build")
+	}
+	if !strings.Contains(src, "tiktoken-go-loader") {
+		t.Errorf("tiktoken_offline.go no longer references tiktoken-go-loader; the offline build would break")
+	}
+}
