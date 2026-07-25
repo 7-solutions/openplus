@@ -151,13 +151,30 @@ func (pc ProjectContext) SystemPrompt(base string) string {
 }
 
 // resolveInRoot joins rel onto root, rejecting any path that escapes it.
+//
+// Containment is decided on absolute paths. A relative root needs it: with
+// root ".", filepath.Join(".", "AGENTS.md") is "AGENTS.md" — the "./" prefix is
+// gone, so a textual prefix check against "." rejects a file that is plainly
+// inside the project. That broke every default `openplus -p ...` invocation,
+// while absolute roots (what the tests used) worked fine.
+//
+// The returned path keeps the caller's root form, relative or absolute, so
+// error messages and logs read the way the user invoked the tool.
 func resolveInRoot(root, rel string) (string, error) {
 	if filepath.IsAbs(rel) {
 		return "", fmt.Errorf("config: instruction path %q must be relative to the project root", rel)
 	}
 	path := filepath.Join(root, rel)
-	cleanRoot := filepath.Clean(root)
-	if path != cleanRoot && !strings.HasPrefix(path, cleanRoot+string(filepath.Separator)) {
+
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		return "", fmt.Errorf("config: resolve project root %q: %w", root, err)
+	}
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return "", fmt.Errorf("config: resolve instruction path %q: %w", rel, err)
+	}
+	if absPath != absRoot && !strings.HasPrefix(absPath, absRoot+string(filepath.Separator)) {
 		return "", fmt.Errorf("config: instruction path %q escapes the project root", rel)
 	}
 	return path, nil
