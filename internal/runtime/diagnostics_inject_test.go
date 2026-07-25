@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/7-solutions/openplus/internal/ports"
 )
@@ -44,6 +45,29 @@ func (c *countingLS) callCount() int {
 
 func editCall(path string) ports.ToolCall {
 	return ports.ToolCall{Name: "edit", Input: []byte(fmt.Sprintf(`{"path":%q}`, path))}
+}
+
+// awaitCalls waits for the async refresh to reach the language service.
+//
+// A test must never assert on the pending-edit set after going through
+// toolResultHook: the hook schedules refreshDiagnosticsAsync, and that
+// goroutine drains editedFiles via takeEditedFiles. Whether the drain has
+// happened by the time the assertion runs is up to the scheduler, so
+// hasEditedFiles() is a coin flip there — it lost on a macOS arm64 runner.
+// The observable that actually proves "the edit scheduled a refresh" is the
+// language service being asked, so wait for that instead.
+func awaitCalls(t *testing.T, ls *countingLS, want int) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		if got := ls.callCount(); got >= want {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("Diagnostics called %d times after 2s, want at least %d", ls.callCount(), want)
+		}
+		time.Sleep(time.Millisecond)
+	}
 }
 
 // TestDiagnosticsInjectedAfterEdit is the point of M4: the agent sees the
@@ -164,7 +188,8 @@ func TestEditedFilesAreDeduped(t *testing.T) {
 // on must still fire after the diagnostics wrapper is installed.
 func TestOnToolResultHookPreservesTheUserCallback(t *testing.T) {
 	s := cmdSession(t)
-	s.LanguageService = &countingLS{}
+	ls := &countingLS{}
+	s.LanguageService = ls
 
 	var got []string
 	s.OnToolResult = func(call ports.ToolCall, _ ports.Block) {
@@ -177,29 +202,32 @@ func TestOnToolResultHookPreservesTheUserCallback(t *testing.T) {
 	if len(got) != 1 || got[0] != "edit" {
 		t.Fatalf("user callback saw %v, want [edit]", got)
 	}
-	if !s.hasEditedFiles() {
-		t.Error("the edit was not recorded for a diagnostics refresh")
-	}
+	awaitCalls(t, ls, 1) // the edit was recorded and the refresh ran
 }
 
 // TestOnlyMutatingToolsTriggerARefresh: reads do not change the code, so they
 // must not schedule work.
 func TestOnlyMutatingToolsTriggerARefresh(t *testing.T) {
 	s := cmdSession(t)
-	s.LanguageService = &countingLS{}
+	ls := &countingLS{}
+	s.LanguageService = ls
 	hook := s.toolResultHook()
 
 	hook(ports.ToolCall{Name: "read", Input: []byte(`{"path":"main.go"}`)}, ports.Block{})
 	hook(ports.ToolCall{Name: "grep", Input: []byte(`{"pattern":"x"}`)}, ports.Block{})
 
+	// Nothing pending and nothing asked: a read schedules no work at all.
+	// Both halves matter — the pending set is safe to read here precisely
+	// because no refresh was scheduled to drain it.
 	if s.hasEditedFiles() {
 		t.Error("a read-only tool scheduled a diagnostics refresh")
 	}
+	if got := ls.callCount(); got != 0 {
+		t.Errorf("read-only tools asked the language service %d times, want 0", got)
+	}
 
 	hook(editCall("main.go"), ports.Block{})
-	if !s.hasEditedFiles() {
-		t.Error("edit did not schedule a diagnostics refresh")
-	}
+	awaitCalls(t, ls, 1)
 }
 
 // TestToolResultHookIsNilWhenNothingNeedsIt: with no LanguageService and no
