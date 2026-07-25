@@ -1,0 +1,112 @@
+# macOS arm64 verification.
+#
+# The Linux CI never executes a darwin binary, and darwin/arm64 release
+# artifacts are cross-compiled — until this workflow existed, nothing had ever
+# run one. The platform-sensitive part is internal/memory: the Turso driver
+# reaches libturso through purego's dlopen, which is per-OS/arch machine code.
+# A cross-compile succeeding says nothing about whether that loads on Apple
+# Silicon.
+#
+# macos-15 runners are arm64, so this is real hardware rather than emulation.
+name: macOS
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_call:      # the release workflow gates on this
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Build and test (darwin/arm64)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          cache: true
+
+      - name: Confirm this really is arm64
+        run: |
+          uname -sm
+          test "$(uname -m)" = "arm64" || { echo "expected an arm64 runner"; exit 1; }
+
+      - name: Build (cgo-free)
+        env:
+          CGO_ENABLED: "0"
+        run: go build ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test with race detector
+        env:
+          CGO_ENABLED: "1"   # the race detector needs cgo; the build gate above is the cgo-free check
+          OPENPLUS_DEFAULT_DOCS: "0"   # keep CI hermetic: no Context7 dial-out
+        run: go test -race -count=1 ./...
+
+  smoke:
+    name: Smoke the built binary (darwin/arm64)
+    runs-on: macos-15
+    needs: verify
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          cache: true
+
+      - name: Build the release-shaped binary
+        env:
+          CGO_ENABLED: "0"
+        run: |
+          go build -trimpath -ldflags "-s -w -X main.Version=ci-smoke" -o openplus ./cmd/openplus
+          file openplus
+
+      - name: Runs at all
+        run: |
+          ./openplus --version | tee /tmp/v.txt
+          grep -q "ci-smoke" /tmp/v.txt || { echo "version not stamped"; exit 1; }
+
+      - name: One full turn, no API key
+        env:
+          OPENPLUS_DEFAULT_DOCS: "0"
+        run: |
+          D=$(mktemp -d)
+          out=$(./openplus --fake -C "$D" -p "say hello" 2>&1)
+          echo "$out"
+          echo "$out" | grep -q "fake provider" || { echo "the fake turn did not complete"; exit 1; }
+
+      # The reason this workflow exists. internal/memory loads libturso via
+      # purego's dlopen, which is per-platform machine code — the single most
+      # likely thing to be broken on a cross-compiled darwin/arm64 build.
+      - name: Memory subsystem — Turso via purego dlopen
+        env:
+          OPENPLUS_DEFAULT_DOCS: "0"
+        run: go test -count=1 -v -run 'TestOpen|TestWrite|TestSearch|TestHybrid' ./internal/memory/...
+
+      - name: LSP against a real gopls
+        env:
+          OPENPLUS_DEFAULT_DOCS: "0"
+        run: |
+          go install golang.org/x/tools/gopls@latest
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+          gopls version
+          go test -count=1 ./internal/lsp/...
+
+      # Skipped when called as a release gate: install.sh resolves the latest
+      # *published* release, which during a release is the previous tag (or
+      # nothing at all, on a first release). Gating on that would verify the
+      # wrong artifact, so this only runs on push and pull_request.
+      - name: Install script accepts macOS
+        if: github.event_name == 'push' || github.event_name == 'pull_request'
+        run: |
+          T=$(mktemp -d)
+          OPENPLUS_INSTALL="$T/bin" sh scripts/install.sh
+          "$T/bin/openplus" --version

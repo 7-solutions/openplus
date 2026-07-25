@@ -39,9 +39,16 @@ jobs:
           CGO_ENABLED: "0"
         run: go test -count=1 ./...
 
+  # darwin/arm64 artifacts are cross-compiled on Linux, so the verify job above
+  # never executes one. This runs the same checks on real Apple Silicon and
+  # gates the matrix with them.
+  verify-macos:
+    name: Verify (macOS arm64)
+    uses: ./.github/workflows/macos.yml
+
   build:
     name: Build ${{ matrix.goos }}/${{ matrix.goarch }}
-    needs: verify
+    needs: [verify, verify-macos]
     runs-on: ubuntu-latest
     strategy:
       matrix:
