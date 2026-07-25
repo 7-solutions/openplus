@@ -235,7 +235,7 @@ func parseRanking(reply string, offered []int) (int, string, error) {
 // only if 1 was not offered — which is why the caller validates against the
 // offered set rather than trusting the number.
 func firstInt(s string) (int, bool) {
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		if s[i] < '0' || s[i] > '9' {
 			continue
 		}

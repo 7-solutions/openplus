@@ -198,7 +198,7 @@ func Compile(src string, opts ...Option) (Compiled, error) {
 	if length == 0 {
 		return Compiled{}, errors.New("jsworkflow: module.exports.phases is empty")
 	}
-	for i := 0; i < length; i++ {
+	for i := range length {
 		phVal := phasesObj.Get(strconv.Itoa(i))
 		if phVal == nil || phVal == goja.Undefined() || phVal == goja.Null() {
 			return Compiled{}, fmt.Errorf("jsworkflow: phase %d is not an object", i)

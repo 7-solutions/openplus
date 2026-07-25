@@ -206,7 +206,7 @@ func TestFakeWorkflowRespectsCancellation(t *testing.T) {
 // not touch the network, the disk, or the clock.
 func TestFakesAreCheapEnoughForTests(t *testing.T) {
 	start := time.Now()
-	for i := 0; i < 1000; i++ {
+	for range 1000 {
 		_, _ = FakeEmbedder{Dimension: 8}.Embed(context.Background(), []string{"x"})
 		_ = FakeTokenizer{}.Count("some text to count")
 	}

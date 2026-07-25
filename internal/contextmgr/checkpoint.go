@@ -110,7 +110,7 @@ func (c Checkpointer) Read() (Checkpoint, error) {
 	// Recent messages are stored as a human-readable digest; they reconstruct as
 	// user-role text so the model still sees what was said, without pretending
 	// to restore exact block structure.
-	for _, line := range strings.Split(section(body, recentHeader, ""), "\n") {
+	for line := range strings.SplitSeq(section(body, recentHeader, ""), "\n") {
 		line = strings.TrimSpace(line)
 		if !strings.HasPrefix(line, "- ") {
 			continue

@@ -83,7 +83,7 @@ func (d Dreamer) Extract(ctx context.Context, trace []ports.Message) ([]string, 
 // parseBullets pulls "- fact" lines out of a reply, dropping prose and blanks.
 func parseBullets(reply string) []string {
 	var out []string
-	for _, line := range strings.Split(reply, "\n") {
+	for line := range strings.SplitSeq(reply, "\n") {
 		line = strings.TrimSpace(line)
 		if !strings.HasPrefix(line, "- ") && line != "-" {
 			continue

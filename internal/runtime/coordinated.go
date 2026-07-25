@@ -182,7 +182,7 @@ func coordinatorBackend(c orchestrate.Coordinator) string {
 // prompt may contain spaces.
 func parseCoordinatedTasks(args string) ([]SubagentTask, error) {
 	var tasks []SubagentTask
-	for _, seg := range strings.Split(args, "|") {
+	for seg := range strings.SplitSeq(args, "|") {
 		seg = strings.TrimSpace(seg)
 		if seg == "" {
 			continue
@@ -195,7 +195,7 @@ func parseCoordinatedTasks(args string) ([]SubagentTask, error) {
 				"mode must know what each subagent will edit", prompt)
 		}
 		var symbols []string
-		for _, sym := range strings.Split(symList, ",") {
+		for sym := range strings.SplitSeq(symList, ",") {
 			if s := strings.TrimSpace(sym); s != "" {
 				symbols = append(symbols, s)
 			}

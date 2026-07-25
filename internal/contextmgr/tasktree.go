@@ -101,7 +101,7 @@ func (t TaskTree) Render() string {
 // the task shape are ignored, so the tree can be embedded in a larger document.
 func ParseTaskTree(s string) (TaskTree, error) {
 	var t TaskTree
-	for _, line := range strings.Split(s, "\n") {
+	for line := range strings.SplitSeq(s, "\n") {
 		trimmed := strings.TrimSpace(line)
 		if !strings.HasPrefix(trimmed, "- ") {
 			continue

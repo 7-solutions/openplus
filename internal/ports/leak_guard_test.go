@@ -37,7 +37,7 @@ func TestNoCoreImportsProviderPackage(t *testing.T) {
 		// _test.go is allowed to import portsfake (test seam at the port)
 		// but not the adapter package.
 		b, _ := os.ReadFile(path)
-		for _, line := range strings.Split(string(b), "\n") {
+		for line := range strings.SplitSeq(string(b), "\n") {
 			trimmed := strings.TrimSpace(line)
 			if strings.HasPrefix(trimmed, "\"github.com/7solutions/openplus/internal/provider\"") {
 				violations = append(violations, path)
@@ -79,7 +79,7 @@ func TestCmdUsesOnlySelectAdapter(t *testing.T) {
 			return nil
 		}
 		b, _ := os.ReadFile(path)
-		for _, line := range strings.Split(string(b), "\n") {
+		for line := range strings.SplitSeq(string(b), "\n") {
 			trimmed := strings.TrimSpace(line)
 			if !strings.HasPrefix(trimmed, "\"github.com/7solutions/openplus/internal/provider") {
 				continue

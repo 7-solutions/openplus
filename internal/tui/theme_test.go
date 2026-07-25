@@ -143,7 +143,7 @@ func TestNoColorLiteralsOutsideTheme(t *testing.T) {
 func TestPaletteAccentsAreDistinct(t *testing.T) {
 	for _, p := range Palettes() {
 		accents := []string{p.Prompt, p.Error, p.Accent}
-		for i := 0; i < len(accents); i++ {
+		for i := range len(accents) {
 			for j := i + 1; j < len(accents); j++ {
 				if accents[i] == accents[j] {
 					t.Errorf("palette %q: accent roles alias (%s)", p.Name, accents[i])

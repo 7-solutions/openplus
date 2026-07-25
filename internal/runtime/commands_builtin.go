@@ -552,7 +552,7 @@ func (s *Session) cmdSubagents(args string) (string, error) {
 	}
 
 	var prompts []string
-	for _, seg := range strings.Split(args, "|") {
+	for seg := range strings.SplitSeq(args, "|") {
 		if p := strings.TrimSpace(seg); p != "" {
 			prompts = append(prompts, p)
 		}
