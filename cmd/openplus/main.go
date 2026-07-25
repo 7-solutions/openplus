@@ -21,6 +21,13 @@ import (
 
 const baseSystemPrompt = "You are OpenPlus, a pure-Go coding agent."
 
+// Version is the build version, stamped at link time via
+//
+//	go build -ldflags '-X main.Version=v0.1.0'
+//
+// Defaults to "dev" so a developer build still reports a sensible string.
+var Version = "dev"
+
 func main() {
 	if err := run(); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
@@ -35,6 +42,7 @@ func run() error {
 		skipPerms bool
 		fake      bool
 		prompt    string
+		showVer   bool
 	)
 	flag.StringVar(&root, "C", ".", "project root")
 	flag.StringVar(&model, "model", "", "model id as <provider>/<model> (overrides opencode.json)")
@@ -42,7 +50,13 @@ func run() error {
 		"allow all tool calls without prompting (explicit deny rules still apply)")
 	flag.BoolVar(&fake, "fake", false, "use the scripted fake provider (no API key needed)")
 	flag.StringVar(&prompt, "p", "", "run a single turn with this prompt and exit")
+	flag.BoolVar(&showVer, "version", false, "print the build version and exit")
 	flag.Parse()
+
+	if showVer {
+		fmt.Println("openplus " + Version)
+		return nil
+	}
 
 	// A bare prompt can also be passed positionally: openplus "do the thing".
 	if prompt == "" && flag.NArg() > 0 {
