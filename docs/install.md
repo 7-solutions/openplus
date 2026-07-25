@@ -1,6 +1,26 @@
 # Installation
 
-OpenPlus runs on **Linux, macOS, and WSL2**, on amd64 and arm64.
+## Supported platforms
+
+A release publishes exactly three artifacts. Anything not in this table is
+refused by the installer with the reason, not left to fail as a 404 or a loader
+error.
+
+| Platform | Architectures | Notes |
+|---|---|---|
+| Linux (glibc) | arm64, amd64 | Tested on Ubuntu, Fedora, Debian, openSUSE, Arch, NixOS |
+| WSL2 | arm64, amd64 | Uses the Linux artifacts unchanged — WSL2 reports `Linux` |
+| macOS | arm64 only | Apple Silicon (M1 and later) |
+
+Explicitly **not** supported:
+
+- **macOS on Intel (x86_64).** No CI runner executes an Intel Mac build, so
+  publishing one would be an untested claim. Use a Linux VM or container.
+- **musl systems (Alpine).** See [below](#alpine-and-other-musl-systems--out-of-scope).
+- **Native Windows.** Use WSL2 and install from inside your distribution.
+
+Other glibc distributions (Mint, Pop!\_OS, RHEL, Rocky, Alma, Gentoo) are not
+blocked and will generally work — they are simply not part of the tested set.
 
 ## One-shot installer (recommended)
 
@@ -140,7 +160,38 @@ in Go. Since musl is not a target, that trade is not worth making.
 
 </details>
 
+### NixOS
+
+NixOS is supported, but needs one thing set up first. The release binary is
+cgo-free and still dynamically linked (see the glibc note above), so it carries
+an ELF interpreter of `/lib64/ld-linux-x86-64.so.2`. NixOS has no FHS, that path
+does not exist, and the failure mode is a `No such file or directory` error
+naming a binary that is plainly there.
+
+Enable [`nix-ld`](https://github.com/nix-community/nix-ld):
+
+```nix
+programs.nix-ld.enable = true;
+programs.nix-ld.libraries = with pkgs; [ stdenv.cc.cc ];
+```
+
+Rebuild (`sudo nixos-rebuild switch`), then run the installer. It detects NixOS,
+finds nix-ld, and rewrites the binary's interpreter with `patchelf` so it starts.
+Without nix-ld the installer stops and prints this same configuration rather
+than installing something that cannot run.
+
+One-off alternative, no system change:
+
+```bash
+nix-shell -p steam-run --run 'steam-run openplus --version'
+```
+
+Building from source with `go build` also works, since the Nix toolchain
+supplies a correct interpreter.
+
 ### macOS
+
+Apple Silicon only — see [Supported platforms](#supported-platforms).
 
 The binary is not notarized. On first run Gatekeeper may block it:
 
@@ -192,4 +243,11 @@ The GitHub API may be rate-limiting you. Pin a version:
 `OPENPLUS_VERSION=v0.0.1-alpha`.
 
 **`unsupported architecture`**
-Releases ship amd64 and arm64. Build from source for anything else.
+Releases ship `linux_amd64`, `linux_arm64` and `darwin_arm64`. Build from source
+for anything else.
+
+**`macOS on Intel (x86_64) is not a supported platform`**
+Expected on an Intel Mac — see [Supported platforms](#supported-platforms).
+
+**`the dynamic loader ... is missing` / `nix-ld is not enabled`**
+See [NixOS](#nixos).

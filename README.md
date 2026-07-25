@@ -25,9 +25,10 @@
 curl -fsSL https://raw.githubusercontent.com/7-solutions/openplus/main/scripts/install.sh | sh
 ```
 
-Works on **Linux, macOS, and WSL2** (amd64 and arm64). The script detects your
-platform, verifies the SHA-256 checksum, and installs to `~/.local/bin` (or
-`/usr/local/bin` when writable).
+Works on **Linux and WSL2** (arm64 and amd64, glibc) and **macOS on Apple
+Silicon** (arm64). The script detects your platform, verifies the SHA-256
+checksum, and installs to `~/.local/bin` (or `/usr/local/bin` when writable).
+Anything else — Intel macOS, musl, native Windows — is refused with the reason.
 
 <details>
 <summary>Other ways to install</summary>
@@ -150,20 +151,33 @@ Full list: **[docs/commands.md](docs/commands.md)**.
   two that fail the build if a wire type crosses a port boundary
 - LSP verified end to end against a real `gopls`
 
+- darwin/arm64 soak-tested on real Apple Silicon: five consecutive CI runs, which
+  is how the one flaky test in the suite was found and fixed
+
 **Not yet proven**
 - Little real-world mileage. Interfaces may move before `v0.1.0`.
-- macOS and arm64 builds are cross-compiled and CI-tested, but have had no manual
-  soak testing.
+- linux/arm64 is cross-compiled and never executed in CI — of the three published
+  artifacts it is the one with no runtime coverage.
 
 **Not built** (deliberately deferred, each needs its own decision record): voice input,
 MCP marketplace, web/share UI, hosted multi-tenant mode, LSP server auto-install.
 
 ### Supported platforms
 
-Linux and macOS on amd64 and arm64, and WSL2. Linux builds target **glibc**;
-musl systems such as Alpine are out of scope, and the installer says so rather
-than installing a binary that cannot run. The reason is recorded in
-[docs/install.md](docs/install.md#alpine-and-other-musl-systems--out-of-scope).
+Three published artifacts, and nothing else:
+
+| Platform | Architectures |
+|---|---|
+| Linux (glibc) — Ubuntu, Fedora, Debian, openSUSE, Arch, NixOS | arm64, amd64 |
+| WSL2 (uses the Linux artifacts) | arm64, amd64 |
+| macOS — Apple Silicon | arm64 |
+
+**macOS on Intel is not supported**: nothing in CI runs an Intel Mac, so the
+artifact would be an untested claim. **musl systems such as Alpine are out of
+scope** — Linux builds target glibc. **Native Windows is not supported**; use
+WSL2. In all three cases the installer refuses with the actual reason instead of
+failing later. **NixOS** needs `nix-ld`, which the installer detects and explains.
+Details in [docs/install.md](docs/install.md#supported-platforms).
 
 ## Architecture
 

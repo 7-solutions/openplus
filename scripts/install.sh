@@ -1,5 +1,12 @@
 #!/bin/sh
-# OpenPlus one-shot installer for Linux, macOS, and WSL2.
+# OpenPlus one-shot installer.
+#
+# Supported platforms — these are the only ones a release publishes:
+#   linux/amd64, linux/arm64   glibc distributions; WSL2 included, it is Linux
+#   darwin/arm64               Apple Silicon
+#
+# Everything else is refused by name rather than left to fail as a download 404
+# or a loader error: musl (Alpine), Intel macOS, native Windows shells.
 #
 #   curl -fsSL https://raw.githubusercontent.com/7-solutions/openplus/main/scripts/install.sh | sh
 #
@@ -68,7 +75,7 @@ detect_platform() {
     arch=$(uname -m)
 
     case "$os" in
-        Linux)  GOOS=linux; check_libc ;;
+        Linux)  GOOS=linux; check_libc ;;   # check_loader runs after GOARCH is known
         Darwin) GOOS=darwin ;;
         # WSL2 reports Linux, so it needs no special case. These are the
         # Windows-native shells, where this script cannot install a Linux binary.
@@ -83,7 +90,123 @@ detect_platform() {
         *) die "unsupported architecture: $arch (openplus ships amd64 and arm64)" ;;
     esac
 
+    # macOS is arm64 only. Rosetta makes an Intel Mac report x86_64 honestly,
+    # and there is no darwin_amd64 archive to fetch — without this the user
+    # would get a 404 from the download step and have to guess why.
+    if [ "$GOOS" = darwin ] && [ "$GOARCH" = amd64 ]; then
+        die "macOS on Intel (x86_64) is not a supported platform.
+
+OpenPlus publishes darwin_arm64 only: no CI runner executes an Intel Mac build,
+so shipping one would be an untested claim rather than support.
+
+Apple Silicon (M1 and later) is supported. On an Intel Mac, run OpenPlus in a
+Linux VM or container instead. See https://github.com/${REPO}/blob/main/docs/install.md"
+    fi
+
     PLATFORM="${GOOS}_${GOARCH}"
+    check_loader
+}
+
+# --- dynamic loader detection ---------------------------------------------------
+# The Linux binaries are cgo-free but still dynamically linked: purego's dlopen
+# of libturso puts a hard DT_NEEDED on libdl.so.2, libpthread.so.0 and libc.so.6,
+# and an ELF interpreter of /lib64/ld-linux-x86-64.so.2 (or the arm64 equivalent).
+#
+# NixOS is a supported distribution but has no FHS: that interpreter path does
+# not exist, so the binary dies with "no such file or directory" naming a file
+# that plainly is there. Detect it and either patch the interpreter to nix-ld or
+# say exactly what to enable.
+nixos_loader() {
+    # nix-ld advertises itself through NIX_LD, and installs a shim loader at a
+    # well-known path. Either is enough to run an FHS binary.
+    if [ -n "${NIX_LD:-}" ] && [ -e "${NIX_LD}" ]; then
+        printf '%s' "${NIX_LD}"
+        return 0
+    fi
+    for f in /run/current-system/sw/share/nix-ld/lib/ld.so; do
+        [ -e "$f" ] && { printf '%s' "$f"; return 0; }
+    done
+    return 1
+}
+
+check_loader() {
+    [ "$GOOS" = linux ] || return 0
+
+    case "$GOARCH" in
+        amd64) INTERP=/lib64/ld-linux-x86-64.so.2 ;;
+        arm64) INTERP=/lib/ld-linux-aarch64.so.1 ;;
+    esac
+    [ -e "$INTERP" ] && return 0
+
+    # A missing loader on a normal FHS distribution means something else is
+    # wrong, so only claim to understand the NixOS case.
+    #
+    # The two paths are overridable so the test suite can exercise the NixOS
+    # branch from a non-NixOS machine. Not documented in the options block on
+    # purpose: it is a test seam, not a knob for users.
+    marker=${OPENPLUS_NIXOS_MARKER:-/etc/NIXOS}
+    osrel=${OPENPLUS_OS_RELEASE:-/etc/os-release}
+
+    is_nixos=0
+    [ -e "$marker" ] && is_nixos=1
+    if [ "$is_nixos" -eq 0 ] && [ -r "$osrel" ]; then
+        . "$osrel" 2>/dev/null || true
+        [ "${ID:-}" = nixos ] && is_nixos=1
+    fi
+
+    if [ "$is_nixos" -eq 0 ]; then
+        die "the dynamic loader ${INTERP} is missing.
+
+The release binary is cgo-free but still dynamically linked against glibc,
+because the Turso driver reaches libturso through purego. Without that loader it
+cannot start. Install glibc, or use a glibc-based distribution or container."
+    fi
+
+    if NIX_LOADER=$(nixos_loader); then
+        ok "NixOS detected, will point the binary at nix-ld (${NIX_LOADER})"
+        return 0
+    fi
+
+    die "NixOS detected, and nix-ld is not enabled.
+
+OpenPlus ships an FHS binary: cgo-free, but dynamically linked against glibc
+because the Turso driver loads libturso through purego. NixOS has no
+${INTERP}, so the binary cannot start until a loader is provided.
+
+Enable nix-ld in your configuration:
+
+  programs.nix-ld.enable = true;
+  programs.nix-ld.libraries = with pkgs; [ stdenv.cc.cc ];
+
+then rebuild (sudo nixos-rebuild switch) and re-run this installer.
+
+Alternatives that need no system change:
+  nix-shell -p steam-run --run 'steam-run ${BIN} --version'
+  nix-shell -p pkgs.stdenv.cc.cc.lib   # then build from source with go build
+
+See https://github.com/${REPO}/blob/main/docs/install.md#nixos"
+}
+
+# --- NixOS interpreter patch ----------------------------------------------------
+# Called after the binary is in place. Rewriting the ELF interpreter to nix-ld's
+# loader is what makes the downloaded artifact runnable on NixOS; patchelf is in
+# nixpkgs, so asking for it is reasonable there. Best effort: if patchelf is
+# missing, the binary may still run under a nix-ld setup that intercepts the FHS
+# path, so warn rather than fail an otherwise complete install.
+patch_nixos_interpreter() {
+    [ -n "${NIX_LOADER:-}" ] || return 0
+    target=$1
+
+    if ! command -v patchelf >/dev/null 2>&1; then
+        warn "patchelf not found; leaving the ELF interpreter as-is.
+     If '${BIN} --version' fails with a missing ${INTERP}, run:
+       nix-shell -p patchelf --run 'patchelf --set-interpreter ${NIX_LOADER} ${target}'"
+        return 0
+    fi
+
+    patchelf --set-interpreter "${NIX_LOADER}" "$target" \
+        || warn "patchelf could not rewrite the interpreter; ${BIN} may not start"
+    ok "interpreter set to nix-ld"
 }
 
 # --- download helper ----------------------------------------------------------
@@ -294,6 +417,7 @@ Check that release ${VERSION} publishes an asset for ${PLATFORM}."
     # Install to a temporary name first, then move into place. A rename is
     # atomic, so a running openplus is never a half-written file.
     chmod +x "${TMP}/${BIN}"
+    patch_nixos_interpreter "${TMP}/${BIN}"
     mv -f "${TMP}/${BIN}" "${INSTALL_DIR}/${BIN}.new" || die "cannot write to ${INSTALL_DIR}"
     mv -f "${INSTALL_DIR}/${BIN}.new" "${INSTALL_DIR}/${BIN}"
 
