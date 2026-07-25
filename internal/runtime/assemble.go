@@ -242,6 +242,9 @@ func (s *Session) assembleMemory() error {
 		return err
 	}
 	store.Embedder = s.Embedder
+	if max := s.Config.Memory.MaxEntries; max > 0 {
+		store.SetMaxEntries(max)
+	}
 	s.Memory = store
 	return nil
 }

@@ -11,6 +11,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
+	"strings"
 
 	"github.com/7solutions/openplus/internal/embed"
 
@@ -33,8 +34,24 @@ type Store struct {
 	// Embedder turns written text into vectors (T-042+). Nil → Write errors.
 	Embedder embed.Embedder
 
+	// maxEntries caps the stored chunks; oldest are pruned first on each
+	// write. Zero means unbounded (the zero-cost path — Write skips the
+	// count query entirely).
+	maxEntries int
+
 	migrated bool
 	dim      int
+}
+
+// SetMaxEntries caps the stored chunks at n. Oldest chunks (lowest id) are
+// pruned on each Write so the cap is enforced even mid-session. n == 0
+// disables the cap. Calling SetMaxEntries(n) with n < 0 is a programming
+// error and treated as 0.
+func (s *Store) SetMaxEntries(n int) {
+	if n < 0 {
+		n = 0
+	}
+	s.maxEntries = n
 }
 
 // Open opens (or creates) the database at path. Use ":memory:" for an ephemeral
@@ -121,7 +138,79 @@ func (s *Store) Write(ctx context.Context, text, source string) (int64, error) {
 	if err := tx.Commit(); err != nil {
 		return 0, fmt.Errorf("memory: commit: %w", err)
 	}
+
+	// Enforce the cap on the just-committed write. Done outside the
+	// transaction so the prune never leaves the chunks table inconsistent
+	// with its FTS/vec indexes — if prune fails, the new chunk is still
+	// committed; we lose the cap by a few rows rather than lose the write.
+	// Zero is the unbounded path; no query needed.
+	if s.maxEntries > 0 {
+		s.pruneToMaxEntries(ctx)
+	}
+
 	return id, nil
+}
+
+// pruneToMaxEntries deletes the oldest chunks so the row count fits
+// maxEntries. Oldest = lowest id (autoincrement from SQLite). Best-effort:
+// a prune failure is silently dropped — the cap is best-effort, the write
+// is not. All three tables (chunks, chunks_fts, chunks_vec) are pruned
+// inside one transaction so Search never sees phantom rowids.
+func (s *Store) pruneToMaxEntries(ctx context.Context) {
+	var n int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM chunks`).Scan(&n); err != nil {
+		return
+	}
+	excess := n - s.maxEntries
+	if excess <= 0 {
+		return
+	}
+	// Collect the ids to delete in one round trip. The slice lets us
+	// issue one DELETE per index rather than three subqueries.
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id FROM chunks ORDER BY id ASC LIMIT ?`, excess)
+	if err != nil {
+		return
+	}
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return
+		}
+		ids = append(ids, id)
+	}
+	rows.Close()
+	if len(ids) == 0 {
+		return
+	}
+	// Build the IN clause once.
+	placeholders := make([]string, len(ids))
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+	in := strings.Join(placeholders, ",")
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return
+	}
+	defer tx.Rollback() //nolint:errcheck
+	if _, err := tx.ExecContext(ctx, `DELETE FROM chunks WHERE id IN (`+in+`)`, args...); err != nil {
+		return
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM chunks_fts WHERE rowid IN (`+in+`)`, args...); err != nil {
+		return
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM chunks_vec WHERE rowid IN (`+in+`)`, args...); err != nil {
+		return
+	}
+	if err := tx.Commit(); err != nil {
+		return
+	}
 }
 
 // ensureSchema creates the chunks table, its FTS5 index, and the vec0 table

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/7solutions/openplus/internal/embed"
 	"github.com/7solutions/openplus/internal/policy"
 	"github.com/7solutions/openplus/internal/provider"
 	"github.com/7solutions/openplus/internal/provider/anthropic"
@@ -466,3 +467,51 @@ func TestAssembleMemoryEnvPathOverride(t *testing.T) {
 		t.Errorf("configured path %q should not exist when env wins", configPath)
 	}
 }
+
+// TestAssembleMemoryMaxEntriesPropagated: configuring memory.maxEntries
+// in opencode.json must reach the store's SetMaxEntries. Without this
+// wiring the config knob is a no-op.
+func TestAssembleMemoryMaxEntriesPropagated(t *testing.T) {
+	root := project(t, `{
+  "model": "local/qwen2.5-coder",
+  "provider": {"local": {"options": {"baseURL": "http://localhost:11434/v1"}}},
+  "embedder": {"model": "nomic-embed-text", "baseURL": "http://localhost:11434/v1"},
+  "memory": {"autoOpen": true, "maxEntries": 3}
+}`)
+	s, err := Assemble(root, Options{})
+	if err != nil {
+		t.Fatalf("Assemble: %v", err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	// The field is unexported; verify behaviorally by writing 5 chunks and
+	// checking only 3 remain.
+	s.Memory.Embedder = embedForCapTest()
+	for i := 0; i < 5; i++ {
+		if _, err := s.Memory.Write(context.Background(), "x", "t"); err != nil {
+			t.Fatalf("Write: %v", err)
+		}
+	}
+	var n int
+	if err := s.Memory.DB().QueryRow(`SELECT COUNT(*) FROM chunks`).Scan(&n); err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if n != 3 {
+		t.Errorf("count = %d, want 3 (memory.maxEntries must reach the store)", n)
+	}
+}
+
+// embedForCapTest returns a deterministic 4-dim embedder for cap tests.
+// Same shape as the one in turn_test.go but kept inline so assemble_test
+// stays self-contained.
+func embedForCapTest() embed.Embedder { return capTestEmbedder{dim: 4} }
+
+type capTestEmbedder struct{ dim int }
+
+func (f capTestEmbedder) Embed(_ context.Context, texts []string) ([][]float32, error) {
+	out := make([][]float32, len(texts))
+	for i := range out {
+		out[i] = make([]float32, f.dim)
+	}
+	return out, nil
+}
+func (f capTestEmbedder) Dim() int { return f.dim }
