@@ -17,14 +17,14 @@
 ## M3 — Verify (Gates 2-4)
 - [x] T-2405 `go build ./...` clean.
 - [x] T-2406 `CGO_ENABLED=0 go build ./...` clean.
-- [ ] T-2407 `go test -count=1 ./...` green (existing hybrid tests incl. `TestHybridSearchBoostsLexicalMatch` must still pass under the default config — the +1/60 boost is preserved).
+- [x] T-2407 `go test -count=1 ./...` green (existing hybrid tests incl. `TestHybridSearchBoostsLexicalMatch` must still pass under the default config — the +1/60 boost is preserved).
 - [x] T-2408 `go test -race ./internal/memory/... ./internal/orchestrate/... ./internal/coordinate/... ./internal/runtime/... ./internal/ports/...` clean.
 - [x] T-2409 Architectural guards: leak guard + `TestNoBannedDirectDeps` still pass (no dep change expected).
 
 ## M4 — Commit + propagate (Gate 5)
-- [ ] T-2410 Single commit `feat(memory): configurable RRF weights and K (0024)`. Push (await explicit push instruction).
+- [x] T-2410 Single commit `feat(memory): configurable RRF weights and K (0024)`. Push (await explicit push instruction).
 - [x] T-2411 Update `MEMORY.md` ADR-0014 entry to note the fusion is now tunable via `WithRRF`; record `DefaultRRF() = {60,1,1}`.
-- [ ] T-2412 ICM `decisions-openplus` store (medium).
+- [x] T-2412 ICM `decisions-openplus` store (medium).
 
 ## Notes for the implementer
 - **Backward compat is load-bearing.** `Open(path)` and `Open(path, WithFTS())` MUST produce identical rankings to pre-0024. The `TestHybridSearchBoostsLexicalMatch` test (which asserts +1/60) is the canary — if it breaks, the default isn't {60,1,1}.

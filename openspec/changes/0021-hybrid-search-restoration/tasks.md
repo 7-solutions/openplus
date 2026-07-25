@@ -37,10 +37,10 @@
 - [x] T-2113 `TestNoBannedDirectDeps` still passes (modernc not banned; ncruces/sqlite-vec still absent).
 
 ## M6 — Commit + propagate (Gate 5)
-- [ ] T-2114 Single commit `feat(memory): restore hybrid FTS5+vector search via modernc shadow index (0021)`. Push.
+- [x] T-2114 Single commit `feat(memory): restore hybrid FTS5+vector search via modernc shadow index (0021)`. Push.
 - [x] T-2115 Ship `docs/adr/0014-hybrid-search-restoration.md`.
-- [ ] T-2116 Update `MEMORY.md` ADR list + discovered-knowledge entry.
-- [ ] T-2117 ICM `decisions-openplus` store (high).
+- [x] T-2116 Update `MEMORY.md` ADR list + discovered-knowledge entry.
+- [x] T-2117 ICM `decisions-openplus` store (high).
 
 ## Notes for the implementer
 - **Driver names**: `"turso"` (primary) and `"sqlite"` (modernc shadow) coexist — no collision.

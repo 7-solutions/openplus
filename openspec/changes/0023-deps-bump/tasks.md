@@ -26,8 +26,8 @@
 - [x] T-2311 Diffed bumped `go.mod` against SNAPSHOT. Notable jumps (for commit message): purego v0.10.0-alpha.2→v0.10.2 (the watch-item; clean), mattn/go-runewidth v0.0.19→v0.0.27, mattn/go-isatty v0.0.20→v0.0.24, modernc/libc v1.74.1→v1.74.3, charmbracelet/{colorprofile v0.4.1→v0.4.3, x/ansi v0.11.6→v0.11.7}, golang.org/x/text v0.39.0→v0.40.0, plus routine clipperhouse/dlclark/go-sourcemap/pprof/go-colorful. `clipperhouse/stringish` dropped (no longer required). `ncruces/go-strftime` (stale indirect, NOT the banned go-sqlite3) remains — allowed. **Zero production code changed.**
 
 ## M5 — Commit + propagate (Gate 5)
-- [ ] T-2312 Single commit `chore(deps): bump pinned dependencies to latest stable (0023)`. Push (await explicit push instruction).
-- [ ] T-2313 ICM `decisions-openplus` store (medium — routine bump; note any watch-item that surfaced).
+- [x] T-2312 Single commit `chore(deps): bump pinned dependencies to latest stable (0023)`. Push (await explicit push instruction).
+- [x] T-2313 ICM `decisions-openplus` store (medium — routine bump; note any watch-item that surfaced).
 
 ## Notes for the implementer
 - **Lockfile-only.** If any `.go` file needs editing to absorb a bump, STOP — that's scope creep; propose it as change 0024 and revert the bump. Do not bundle code changes into a deps bump.

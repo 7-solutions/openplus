@@ -26,10 +26,10 @@
 - [x] T-2211 Sanity: `grep -rn "tursodatabase/turso-go" --include=*.go` returns only INTENTIONAL references — the store.go historical-re-target doc comment and the ports_test.go ban-list entry + matcher explanation. No stale imports/usages.
 
 ## M5 — Commit + propagate (Gate 5)
-- [ ] T-2212 Single commit `chore(driver): re-target Turso to canonical turso.tech/database/tursogo v0.7.1 (0022)`. Push (await explicit push instruction).
+- [x] T-2212 Single commit `chore(driver): re-target Turso to canonical turso.tech/database/tursogo v0.7.1 (0022)`. Push (await explicit push instruction).
 - [x] T-2213 Ship `docs/adr/0015-turso-driver-retarget.md`.
 - [x] T-2214 Update `MEMORY.md` (driver pin in project context + ADR-0015 in decisions; mark the archived-path wrong-turn resolved).
-- [ ] T-2215 ICM `decisions-openplus` store (high).
+- [x] T-2215 ICM `decisions-openplus` store (high).
 
 ## Notes for the implementer
 - **The ONLY production-code change is one import line.** Everything else is go.mod, comments, the guard, and docs. If the diff grows beyond that, something is wrong — stop and re-read the proposal.
