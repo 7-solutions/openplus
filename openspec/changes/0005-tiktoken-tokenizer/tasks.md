@@ -63,17 +63,18 @@
       catching a future refactor that drops the build tag.
 
 ## Verification (Gate 5 — before declaring 0005 done)
-- [ ] `go build ./...` clean.
-- [ ] `go test ./internal/contextmgr/...` — old + new tests green.
-- [ ] `go test ./...` — 22/22 green (the new tests live in an existing
+- [x] `go build ./...` clean.
+- [x] `go test ./internal/contextmgr/...` — old + new tests green.
+- [x] `go test ./...` — 22/22 green (the new tests live in an existing
       package, no package count change).
-- [ ] `go run ./cmd/openplus --fake -C $(mktemp -d) -p 'hello'` —
+- [x] `go run ./cmd/openplus --fake -C $(mktemp -d) -p 'hello'` —
       smoke path still works; `ForModel` is hit once at Assemble.
-- [ ] `TIKTOKEN_CACHE_DIR=$(mktemp -d) go test
+- [x] `TIKTOKEN_CACHE_DIR=$(mktemp -d) go test
       ./internal/contextmgr/...` — fresh cache, encoding downloads
-      once, subsequent runs use the cache.
-- [ ] `go test -tags offline ./internal/contextmgr/...` — offline
-      path compiles and runs.
+      once, subsequent runs use the cache. Verified: 4.86s cold vs
+      0.36s warm, cache dir populated with two BPE blobs.
+- [x] `go test -tags offline ./internal/contextmgr/...` — offline
+      path compiles and runs (43 tests).
 
 ## Out of scope (per proposal)
 - Anthropic tokenizer (BPE isn't publicly published).

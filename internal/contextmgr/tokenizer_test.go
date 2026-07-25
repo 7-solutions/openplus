@@ -72,9 +72,9 @@ func TestHeuristicPerModelRatio(t *testing.T) {
 // local/unknown falls back to Heuristic.
 func TestForModelSelectsByPrefix(t *testing.T) {
 	cases := []struct {
-		model  string
-		isTik  bool
-		isH    bool
+		model string
+		isTik bool
+		isH   bool
 	}{
 		{"anthropic/claude-sonnet-5", false, true},
 		{"openai/gpt-4o-mini", true, false},

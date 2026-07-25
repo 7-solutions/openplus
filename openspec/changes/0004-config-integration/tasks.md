@@ -127,18 +127,22 @@
       Done — 9bca4e1.
 
 ## Verification (Gate 5 — before declaring 0004 done)
-- [ ] `go build ./...` clean.
-- [ ] `go test ./...` green for every package (existing + new tests).
-- [ ] `go test ./internal/runtime/... -run Integration -v` — the four
-      integration scenarios pass.
-- [ ] End-to-end smoke:
+- [x] `go build ./...` clean.
+- [x] `go test ./...` green for every package (existing + new tests).
+      22/22 packages.
+- [x] `go test ./internal/runtime/... -run Integration -v` — the four
+      integration scenarios pass (memory round-trip, permission deny,
+      credential wrap, fake smoke).
+- [x] End-to-end smoke:
       `go run ./cmd/openplus --fake -C $(mktemp -d) -p 'say hello'`
       prints the scripted reply.
-- [ ] `go run ./cmd/openplus --version` prints `openplus dev` (or the
+- [x] `go run ./cmd/openplus --version` prints `openplus dev` (or the
       build version).
-- [ ] `OPENPLUS_FAKE=1 go run ./cmd/openplus -C $(mktemp -d) -p 'say hello'`
+- [x] `OPENPLUS_FAKE=1 go run ./cmd/openplus -C $(mktemp -d) -p 'say hello'`
       works without `--fake`.
-- [ ] Exit-code contract documented in `cmd/openplus/main.go` godoc.
+- [x] Exit-code contract documented in `cmd/openplus/main.go` godoc, and
+      verified empirically: 0 clean, 2 no-model, 2 missing-credential,
+      1 other.
 
 ## Out of scope (per proposal)
 Encryption at rest · shell completion · rate limiting / retries in the

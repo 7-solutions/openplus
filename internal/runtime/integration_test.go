@@ -173,7 +173,7 @@ type countingTool struct {
 	calls atomic.Int32
 }
 
-func (c *countingTool) Name() string  { return c.name }
+func (c *countingTool) Name() string { return c.name }
 func (c *countingTool) Description() string {
 	return "counts Execute calls so the test can prove the gate denied before the tool ran"
 }
@@ -299,7 +299,9 @@ func TestIntegrationCredentialMissingWraps(t *testing.T) {
 // --- T-433: --fake end-to-end smoke ---
 
 // TestIntegrationFakeSmokeEndToEnd: the full path
-//   Assemble(tempRoot, Options{Fake:true}) → Run("hi") → Close
+//
+//	Assemble(tempRoot, Options{Fake:true}) → Run("hi") → Close
+//
 // returns a history with at least one user and one assistant message,
 // and no error. This is the lowest-cost end-to-end assertion that proves
 // the runtime wires Assemble + Session.Run + Close without regression.

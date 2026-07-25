@@ -479,6 +479,7 @@ func TestAssembleConfigPathMissingErrors(t *testing.T) {
 		t.Fatal("expected an error when --config points at a missing file")
 	}
 }
+
 //
 // --- Change 0004 / T-424: env overrides on Model + Fake ---
 
