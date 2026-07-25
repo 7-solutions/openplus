@@ -24,6 +24,11 @@ type Agent struct {
 	// OnEvent, if set, receives every streamed Event as it arrives — the
 	// seam a Bubble Tea front-end (T-030) hooks into for live rendering.
 	OnEvent func(provider.Event)
+
+	// OnToolResult, if set, is fired after each tool call executes (or is
+	// denied/fails), carrying the call and its neutral result block. The TUI
+	// (T-031) uses it to render edit diffs and tool output.
+	OnToolResult func(call provider.ToolCall, result provider.Block)
 }
 
 // Run drives one session to completion: repeated turns until a turn
@@ -54,6 +59,9 @@ func (a *Agent) Run(ctx context.Context, system string, tools []provider.ToolSch
 		resultMsg := provider.Message{Role: provider.RoleUser}
 		for _, call := range calls {
 			block := a.executeOne(ctx, call)
+			if a.OnToolResult != nil {
+				a.OnToolResult(call, block)
+			}
 			resultMsg.Blocks = append(resultMsg.Blocks, block)
 		}
 		history = append(history, resultMsg)

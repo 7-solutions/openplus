@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/7solutions/openplus/internal/diff"
 )
 
 // Edit performs an exact string replacement in a file. old_string must occur
@@ -75,11 +77,6 @@ func (Edit) Execute(ctx context.Context, input json.RawMessage) (string, error) 
 		return "", fmt.Errorf("edit: write: %w", err)
 	}
 
-	// Return a small context window around the replacement.
-	idx := strings.Index(updated, in.NewString)
-	region := updated[max(0, idx-80):]
-	if i := strings.IndexByte(region, '\n'); i >= 0 && len(region) > 400 {
-		region = region[i+1:]
-	}
-	return region, nil
+	// Return a unified diff of the change (powers the TUI diff view, T-031).
+	return diff.Unified(body, updated), nil
 }

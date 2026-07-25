@@ -38,7 +38,7 @@
 
 ## M3 — TUI (Crush base, ADR-0001)
 - [x] T-030 Bubble Tea shell: input, streaming output, tool-event view.
-- [ ] T-031 Diff view for edits; permission prompt component.
+- [x] T-031 Diff view for edits; permission prompt component.
 
 ## M4 — Memory (ADR-0003, ADR-0004)
 - [ ] T-040 ncruces/go-sqlite3 wiring + sqlite-vec (ncruces) load; `vec_version()` test.

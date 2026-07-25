@@ -54,14 +54,30 @@ func main() {
 		Tools:    registry,
 		Gate:     gate,
 	}
-	p := tea.NewProgram(tui.New(agentInst, "You are OpenPlus.", schemas(registry)), tea.WithAltScreen())
+	m := tui.New(agentInst, "You are OpenPlus.", schemas(registry))
+	answer := make(chan bool, 1)
+	m = m.WithAnswer(answer)
+	p := tea.NewProgram(m, tea.WithAltScreen())
+
+	// Bridge agent callbacks into the program, and wire the permission prompter.
+	agentInst.OnEvent = func(ev provider.Event) { p.Send(tui.StreamMsg(ev)) }
+	agentInst.OnToolResult = func(call provider.ToolCall, res provider.Block) {
+		p.Send(tui.ToolResultMsg{Call: call, Result: res})
+	}
+	if prompting, ok := gate.(*policy.Prompting); ok {
+		prompting.Prompter = tui.NewPrompter(p.Send, answer)
+	}
+
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
 }
 
-// buildGate selects the permission gate from flags.
+// buildGate selects the permission gate from flags. The default asks before
+// mutating tools (bash/write/edit); --dangerously-skip-permissions drops to an
+// allow-all base. The returned Prompting gate's Prompter is wired by the caller
+// for the TUI.
 func buildGate(skipPerms bool) (policy.Gate, error) {
 	if skipPerms {
 		skip, err := policy.NewSkip(nil, nil)
@@ -71,7 +87,12 @@ func buildGate(skipPerms bool) (policy.Gate, error) {
 		fmt.Fprintln(os.Stderr, "warning: --dangerously-skip-permissions active (allow-all base)")
 		return skip, nil
 	}
-	return policy.AllowAll{}, nil
+	rules, err := policy.NewRules(policy.Allow,
+		map[string]string{"bash": "ask", "write": "ask", "edit": "ask"}, nil)
+	if err != nil {
+		return nil, err
+	}
+	return &policy.Prompting{Rules: rules}, nil
 }
 
 // schemas converts the tool registry into provider-neutral tool schemas.

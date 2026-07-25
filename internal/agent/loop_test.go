@@ -98,6 +98,38 @@ func TestAgent_DeniedToolCallDoesNotExecute(t *testing.T) {
 	}
 }
 
+// Proves OnToolResult fires with the call and its result block (T-031 seam).
+func TestAgent_OnToolResultFires(t *testing.T) {
+	fake := &provider.Fake{
+		Scripts: [][]provider.Event{
+			{{
+				Kind: provider.EventToolCallStart,
+				Call: &provider.ToolCall{ID: "c1", Name: "echo", Input: []byte(`{"text":"hi"}`)},
+			}, {Kind: provider.EventTurnEnd}},
+			{{Kind: provider.EventTurnEnd}},
+		},
+	}
+	type seen struct {
+		name string
+		text string
+	}
+	var got []seen
+	a := &Agent{
+		Provider: fake,
+		Tools:    tool.NewRegistry(tool.Echo{}),
+		Gate:     policy.AllowAll{},
+		OnToolResult: func(call provider.ToolCall, result provider.Block) {
+			got = append(got, seen{call.Name, result.ToolResultText})
+		},
+	}
+	if _, err := a.Run(context.Background(), "", nil, nil); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if len(got) != 1 || got[0].name != "echo" || got[0].text != "hi" {
+		t.Fatalf("OnToolResult = %+v", got)
+	}
+}
+
 // Proves EventThinkingDelta is captured into a neutral BlockThinking (extended
 // thinking, ADR-0005 / T-012) rather than mixed into assistant text.
 func TestAgent_CapturesThinking(t *testing.T) {

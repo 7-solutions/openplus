@@ -39,6 +39,21 @@ func TestEditNoMatchErrors(t *testing.T) {
 	}
 }
 
+// TestEditReturnsUnifiedDiff proves the edit result is a +/- diff (T-031).
+func TestEditReturnsUnifiedDiff(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "f.txt")
+	os.WriteFile(p, []byte("alpha\nbeta\ngamma\n"), 0o600)
+	out, err := (Edit{}).Execute(context.Background(), jsonInput(t, map[string]any{
+		"file_path": p, "old_string": "beta", "new_string": "BETA",
+	}))
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if !strings.Contains(out, "- beta") || !strings.Contains(out, "+ BETA") {
+		t.Fatalf("edit result not a diff:\n%s", out)
+	}
+}
+
 func TestEditMultipleMatchesErrors(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "f.txt")
 	os.WriteFile(p, []byte("dup\ndup\n"), 0o600)

@@ -85,3 +85,63 @@ func TestSubmitAppendsUserAndStartsBusy(t *testing.T) {
 		t.Fatalf("user text = %q", m.history[0].Blocks[0].Text)
 	}
 }
+
+func TestApplyToolResultRendersDiff(t *testing.T) {
+	m := newTestModel()
+	m.applyToolResult(provider.ToolCall{Name: "edit"}, provider.Block{
+		Kind:           provider.BlockToolResult,
+		ToolResultText: "- old\n+ new\n",
+	})
+	if len(m.log) != 1 || m.log[0] != "- old\n+ new" {
+		t.Fatalf("edit diff not rendered: %v", m.log)
+	}
+}
+
+func TestApplyToolResultError(t *testing.T) {
+	m := newTestModel()
+	m.applyToolResult(provider.ToolCall{Name: "bash"}, provider.Block{
+		Kind:            provider.BlockToolResult,
+		ToolResultText:  "denied by policy",
+		ToolResultError: true,
+	})
+	if len(m.log) != 1 || m.log[0] != "✗ bash: denied by policy" {
+		t.Fatalf("error result not rendered: %v", m.log)
+	}
+}
+
+func TestPromptMsgSetsPending(t *testing.T) {
+	m := newTestModel()
+	mm, _ := m.Update(promptMsg{call: provider.ToolCall{Name: "bash"}})
+	m = mm.(Model)
+	if m.pending == nil || m.pending.Name != "bash" {
+		t.Fatalf("pending not set: %+v", m.pending)
+	}
+}
+
+func TestAnswerPromptSendsAndClears(t *testing.T) {
+	m := newTestModel()
+	m.answer = make(chan bool, 1)
+	m.pending = &provider.ToolCall{Name: "bash"}
+	m = m.answerPrompt(true)
+	select {
+	case got := <-m.answer:
+		if !got {
+			t.Fatal("want true on answer channel")
+		}
+	default:
+		t.Fatal("answer not sent")
+	}
+	if m.pending != nil {
+		t.Fatal("pending not cleared")
+	}
+}
+
+func TestAnswerPromptWithoutChannelNoPanic(t *testing.T) {
+	m := newTestModel()
+	m.pending = &provider.ToolCall{Name: "x"}
+	// answer is nil — must not panic, must clear pending.
+	m = m.answerPrompt(false)
+	if m.pending != nil {
+		t.Fatal("pending not cleared")
+	}
+}
