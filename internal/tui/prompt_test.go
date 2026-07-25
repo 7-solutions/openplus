@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -13,8 +14,15 @@ import (
 
 func TestPrompterAskApproved(t *testing.T) {
 	answer := make(chan bool, 1)
-	var captured promptMsg
-	p := NewPrompter(func(m tea.Msg) { captured = m.(promptMsg) }, answer)
+	var (
+		mu       sync.Mutex
+		captured promptMsg
+	)
+	p := NewPrompter(func(m tea.Msg) {
+		mu.Lock()
+		captured = m.(promptMsg)
+		mu.Unlock()
+	}, answer)
 
 	call := provider.ToolCall{ID: "c1", Name: "bash", Input: []byte(`{"command":"rm -rf x"}`)}
 	type res struct {
@@ -26,8 +34,12 @@ func TestPrompterAskApproved(t *testing.T) {
 
 	// give the goroutine a moment to send the prompt
 	time.Sleep(20 * time.Millisecond)
-	if captured.call.Name != "bash" {
-		t.Fatalf("prompt not sent: %+v", captured)
+	mu.Lock()
+	name := captured.call.Name
+	sent := captured
+	mu.Unlock()
+	if name != "bash" {
+		t.Fatalf("prompt not sent: %+v", sent)
 	}
 	answer <- true
 	r := <-resCh

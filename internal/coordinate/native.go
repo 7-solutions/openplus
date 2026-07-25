@@ -162,8 +162,11 @@ func (n *NativeCoordinator) createWorktree(ctx context.Context, agent string) (s
 
 func (n *NativeCoordinator) removeWorktree(ctx context.Context, agent string) error {
 	dir := n.worktreeDir(agent)
-	if _, err := os.Stat(dir); os.IsNotExist(err) {
-		return nil
+	if _, err := os.Stat(dir); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
 	}
 	if out, err := n.git(ctx, "worktree", "remove", "--force", dir); err != nil {
 		_ = os.RemoveAll(dir)
