@@ -6,8 +6,8 @@
 ## M0 — Foundation
 - [x] T-001 Scaffold module `github.com/7solutions/openplus`, `cmd/openplus`, CI, lint.
 - [x] T-002 Config loader: parse `opencode.json` (provider/model/permission).
-- [ ] T-003 `AGENTS.md` loader + project-context assembly.
-- [ ] T-004 Define all ten ports as interfaces with no-op fakes for tests.
+- [x] T-003 `AGENTS.md` loader + project-context assembly.
+- [x] T-004 Define all ten ports as interfaces with no-op fakes for tests.
 
 ## M1 — Provider core (ADR-0005)
 - [~] T-010 Neutral Request/Event/Block model — **scaffolded**: `internal/provider/types.go`.
@@ -72,8 +72,8 @@
 - [x] T-081 TDD-per-task gate + Advisor review gate wired into review phase.
 
 ## M9 — Self-improvement
-- [ ] T-090 `/dream`: traces→memory extraction + stale-entry pruning.
-- [ ] T-091 `/distill`: repeated-workflow mining → skill/subagent/command scaffolds.
+- [x] T-090 `/dream`: traces→memory extraction + stale-entry pruning.
+- [x] T-091 `/distill`: repeated-workflow mining → skill/subagent/command scaffolds.
 
 ## Deferred (add-on-trigger only — do not build)
 voice/ASR · Max Mode · MCP marketplace · web/share UI · hosted server mode · goja JS workflows.
