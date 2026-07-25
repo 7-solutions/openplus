@@ -56,6 +56,22 @@ type Embedder struct {
 // no store at all.
 func (e Embedder) Configured() bool { return e.Model != "" }
 
+// applyEnvOverrides layers OPENPLUS_EMBED_* env vars on top of the file values.
+// Precedence: env wins if non-empty, file is the default. Called by Load after
+// the file is parsed; not part of the public surface because the override only
+// matters at config-resolution time, not after a caller mutates Embedder.
+func (e *Embedder) applyEnvOverrides() {
+	if v := os.Getenv("OPENPLUS_EMBED_MODEL"); v != "" {
+		e.Model = v
+	}
+	if v := os.Getenv("OPENPLUS_EMBED_BASE_URL"); v != "" {
+		e.BaseURL = v
+	}
+	if v := os.Getenv("OPENPLUS_EMBED_API_KEY"); v != "" {
+		e.APIKey = v
+	}
+}
+
 // Memory is the memory-store configuration.
 type Memory struct {
 	// Path is the database file, relative to the project root when not absolute.
@@ -134,6 +150,7 @@ func Load(path string) (*Config, error) {
 			Window: doc.Context.Window,
 		},
 	}
+	cfg.Embedder.applyEnvOverrides()
 
 	for id, rp := range doc.Provider {
 		cfg.Providers[id] = Provider{

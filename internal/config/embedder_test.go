@@ -1,6 +1,9 @@
 package config
 
-import "testing"
+import (
+	"os"
+	"testing"
+)
 
 func TestLoadParsesEmbedderBlock(t *testing.T) {
 	t.Setenv("EMBED_KEY", "sk-embed")
@@ -86,5 +89,74 @@ func TestLoadParsesContextBudget(t *testing.T) {
 	}
 	if cfg.Context.Window != 200000 {
 		t.Errorf("window = %d", cfg.Context.Window)
+	}
+}
+
+// --- Change 0004 / T-400..T-402: embedder env overrides ---
+
+// TestEmbedderEnvModelOverride: OPENPLUS_EMBED_MODEL wins over the file.
+func TestEmbedderEnvModelOverride(t *testing.T) {
+	t.Setenv("OPENPLUS_EMBED_MODEL", "env-model")
+	p := writeFixture(t, "opencode.json", `{
+  "embedder": {"model": "file-model"}
+}`)
+	cfg, err := Load(p)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Embedder.Model != "env-model" {
+		t.Errorf("embedder model = %q, want env-model", cfg.Embedder.Model)
+	}
+}
+
+// TestEmbedderEnvBaseURLOverride: OPENPLUS_EMBED_BASE_URL wins over the file.
+func TestEmbedderEnvBaseURLOverride(t *testing.T) {
+	t.Setenv("OPENPLUS_EMBED_BASE_URL", "http://env-host/v1")
+	p := writeFixture(t, "opencode.json", `{
+  "embedder": {"model": "m", "baseURL": "http://file-host/v1"}
+}`)
+	cfg, err := Load(p)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Embedder.BaseURL != "http://env-host/v1" {
+		t.Errorf("embedder baseURL = %q, want http://env-host/v1", cfg.Embedder.BaseURL)
+	}
+}
+
+// TestEmbedderEnvAPIKeyOverride: OPENPLUS_EMBED_API_KEY wins over the file.
+func TestEmbedderEnvAPIKeyOverride(t *testing.T) {
+	t.Setenv("OPENPLUS_EMBED_API_KEY", "sk-env")
+	p := writeFixture(t, "opencode.json", `{
+  "embedder": {"model": "m", "apiKey": "sk-file"}
+}`)
+	cfg, err := Load(p)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Embedder.APIKey != "sk-env" {
+		t.Errorf("embedder apiKey = %q, want sk-env", cfg.Embedder.APIKey)
+	}
+}
+
+// TestEmbedderEnvAbsentLeavesFileAlone: with no OPENPLUS_EMBED_* env set,
+// the parsed file values flow through untouched.
+func TestEmbedderEnvAbsentLeavesFileAlone(t *testing.T) {
+	for _, k := range []string{"OPENPLUS_EMBED_MODEL", "OPENPLUS_EMBED_BASE_URL", "OPENPLUS_EMBED_API_KEY"} {
+		old, had := os.LookupEnv(k)
+		os.Unsetenv(k)
+		if had {
+			t.Setenv(k, old)
+		}
+	}
+	p := writeFixture(t, "opencode.json", `{
+  "embedder": {"model": "file-model", "baseURL": "http://f/v1", "apiKey": "sk-file"}
+}`)
+	cfg, err := Load(p)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Embedder.Model != "file-model" || cfg.Embedder.BaseURL != "http://f/v1" || cfg.Embedder.APIKey != "sk-file" {
+		t.Errorf("env-absent path mutated embedder: %+v", cfg.Embedder)
 	}
 }
