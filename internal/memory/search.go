@@ -1,9 +1,14 @@
-// Package memory — hybrid retrieval (T-042, change 0020).
+// Package memory — hybrid retrieval (T-042; change 0020 vector-only;
+// change 0021 restored the lexical half via an FTS5 shadow index).
 //
-// Search uses Turso's vector_distance_cos against the embedded column on
-// the chunks table. The RRF fusion harness is preserved so the lexical
-// (FTS5) half can be re-added in a later change when Turso ships a
-// libturso build with the fts5 module compiled in.
+// Search fuses two ranked lists via Reciprocal Rank Fusion (RRF):
+//   - vector KNN: Turso's vector_distance_cos against the embedding column.
+//   - lexical bm25: the modernc.org/sqlite FTS5 shadow index (when present).
+//
+// Each half contributes 1/(rrfK+rank) per result; the fused score is their
+// sum. When the shadow is absent (Open without WithFTS), Search is the
+// change 0020 vector-only path. When present, lexical matches boost the
+// chunks whose text contains the query terms.
 package memory
 
 import (
@@ -70,6 +75,20 @@ func (s *Store) Search(ctx context.Context, query string, k int) ([]Result, erro
 		scores[id] += 1.0 / (rrfK + float64(rank))
 	}
 	vecRows.Close()
+
+	// Lexical half (change 0021): when the FTS shadow is present, fuse its
+	// bm25-ranked results into the same score map via RRF. A chunk that the
+	// vector half ranked outside its top-k can still surface here, because
+	// RRF unions the two ranked lists before trimming to k.
+	if s.fts != nil {
+		ftsScores, err := s.fts.search(ctx, query, k)
+		if err != nil {
+			return nil, fmt.Errorf("memory: fts search: %w", err)
+		}
+		for id, contribution := range ftsScores {
+			scores[id] += contribution
+		}
+	}
 
 	if len(scores) == 0 {
 		return nil, nil

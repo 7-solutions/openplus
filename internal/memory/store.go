@@ -17,6 +17,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -51,8 +52,29 @@ type Store struct {
 	// count query entirely).
 	maxEntries int
 
+	// fts is the optional lexical shadow index (change 0021): a derived
+	// FTS5 index over (rowid, text) backed by modernc.org/sqlite. Nil
+	// means vector-only — the backward-compatible default from 0020.
+	fts *ftsIndex
+
+	// wantFTS is set by the WithFTS option; Open acts on it to open the
+	// shadow once the primary handle is ready.
+	wantFTS bool
+
 	migrated bool
 	dim      int
+}
+
+// OpenOption configures an Open call. The zero-value option set gives the
+// change 0020 vector-only behavior; WithFTS opts into hybrid retrieval.
+type OpenOption func(*Store)
+
+// WithFTS enables the FTS5 lexical shadow index for hybrid retrieval. The
+// shadow lives at a path derived from the primary (":memory:" → ":memory:",
+// or "<base>.fts.db" beside the primary file). It is a derived index,
+// reconstructable via RebuildFTS.
+func WithFTS() OpenOption {
+	return func(s *Store) { s.wantFTS = true }
 }
 
 // SetMaxEntries caps the stored chunks at n. Oldest chunks (lowest id) are
@@ -68,7 +90,11 @@ func (s *Store) SetMaxEntries(n int) {
 
 // Open opens (or creates) the database at path. Use ":memory:" for an ephemeral
 // in-memory store. Recommended pragmas (WAL, sane busy timeout) are applied.
-func Open(path string) (*Store, error) {
+//
+// Options: pass WithFTS() to enable the FTS5 lexical shadow index for hybrid
+// (lexical+vector) retrieval. Without it, the store is vector-only (the
+// change 0020 default). The shadow lives at a derived sibling path.
+func Open(path string, opts ...OpenOption) (*Store, error) {
 	db, err := sql.Open(driverName, path)
 	if err != nil {
 		return nil, fmt.Errorf("memory: open: %w", err)
@@ -87,7 +113,37 @@ func Open(path string) (*Store, error) {
 			_ = err
 		}
 	}
-	return &Store{db: db, path: path}, nil
+	s := &Store{db: db, path: path}
+	for _, opt := range opts {
+		if opt != nil {
+			opt(s)
+		}
+	}
+	if s.wantFTS {
+		shadow, err := openFTS(shadowPath(path))
+		if err != nil {
+			db.Close()
+			return nil, fmt.Errorf("memory: open fts shadow: %w", err)
+		}
+		s.fts = shadow
+	}
+	return s, nil
+}
+
+// shadowPath derives the FTS shadow's database path from the primary's.
+// ":memory:" maps to ":memory:" (an independent ephemeral DB linked to the
+// primary only by the rowids Write passes). A file path maps to a sibling
+// "<base>.fts.db" so the shadow persists beside the primary.
+func shadowPath(primary string) string {
+	if primary == ":memory:" {
+		return ":memory:"
+	}
+	dir := filepath.Dir(primary)
+	base := filepath.Base(primary)
+	if ext := filepath.Ext(base); ext != "" {
+		base = strings.TrimSuffix(base, ext)
+	}
+	return filepath.Join(dir, base+".fts.db")
 }
 
 // VecVersion reports the libturso version baked into the Go bindings.
@@ -108,8 +164,17 @@ func (s *Store) VecVersion() (string, error) {
 // Callers must not close it; use Store.Close.
 func (s *Store) DB() *sql.DB { return s.db }
 
-// Close closes the database.
-func (s *Store) Close() error { return s.db.Close() }
+// Close closes the database and, if present, the FTS shadow index.
+func (s *Store) Close() error {
+	var err error
+	if s.fts != nil {
+		err = s.fts.close()
+	}
+	if cerr := s.db.Close(); cerr != nil && err == nil {
+		err = cerr
+	}
+	return err
+}
 
 // Write embeds and stores one text chunk (source tags its origin), indexing it
 // in both the FTS5 table (lexical) and the vector column (semantic) for hybrid
@@ -156,9 +221,17 @@ func (s *Store) Write(ctx context.Context, text, source string) (int64, error) {
 	if err := tx.Commit(); err != nil {
 		return 0, fmt.Errorf("memory: commit: %w", err)
 	}
-	// with its FTS index — if prune fails, the new chunk is still
-	// committed; we lose the cap by a few rows rather than lose the write.
-	// Zero is the unbounded path; no query needed.
+	// Index the new chunk into the lexical shadow if present (change 0021).
+	// Best-effort: a shadow failure never loses the primary write — the
+	// shadow is a derived index, reconstructable via RebuildFTS.
+	if s.fts != nil {
+		if err := s.fts.index(ctx, id, text); err != nil {
+			_ = err // best-effort; see comment above
+		}
+	}
+	// Enforce the cap. Done outside the transaction so the prune never
+	// leaves the chunks table inconsistent with itself. Zero is the
+	// unbounded path; no query needed.
 	if s.maxEntries > 0 {
 		s.pruneToMaxEntries(ctx)
 	}
@@ -211,6 +284,43 @@ func (s *Store) pruneToMaxEntries(ctx context.Context) {
 	if _, err := s.db.ExecContext(ctx, `DELETE FROM chunks WHERE id IN (`+in+`)`, args...); err != nil {
 		return
 	}
+	// Mirror the delete into the lexical shadow so Search never returns
+	// phantom lexical hits for pruned chunks (change 0021). Best-effort:
+	// a shadow delete failure leaves the shadow over-full, not the
+	// primary under-full; the next RebuildFTS reconciles.
+	if s.fts != nil {
+		_ = s.fts.delete(ctx, ids)
+	}
+}
+
+// RebuildFTS reconstructs the lexical shadow index from the primary chunks
+// table. It clears chunks_fts and re-indexes every (id, text) row. Use this
+// to recover from a corrupt or missing shadow file, or after bulk-loading
+// chunks while the shadow was disabled. No-op when the shadow is absent
+// (vector-only store); returns nil in that case.
+func (s *Store) RebuildFTS(ctx context.Context) error {
+	if s.fts == nil {
+		return nil
+	}
+	if _, err := s.fts.db.ExecContext(ctx, `DELETE FROM chunks_fts`); err != nil {
+		return fmt.Errorf("memory: rebuild clear: %w", err)
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT id, text FROM chunks`)
+	if err != nil {
+		return fmt.Errorf("memory: rebuild scan: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id int64
+		var text string
+		if err := rows.Scan(&id, &text); err != nil {
+			return err
+		}
+		if err := s.fts.index(ctx, id, text); err != nil {
+			return err
+		}
+	}
+	return rows.Err()
 }
 
 // ensureSchema creates the chunks table with its vector column. The
