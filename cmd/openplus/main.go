@@ -31,8 +31,28 @@ var Version = "dev"
 func main() {
 	if err := run(); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
-		os.Exit(1)
+		os.Exit(exitCode(err))
 	}
+}
+
+// exitCode maps an error from run() to a process exit code (T-427):
+//
+//	0 = clean run
+//	2 = configuration problem (missing credential, no model)
+//	1 = everything else (provider error, mid-turn failure, policy rejection)
+//
+// The two sentinel errors wrap any assembly-time configuration failure;
+// mapping them to 2 lets first-run scripts detect "I need an apiKey" vs
+// "the provider is down" by exit code alone. Stderr text is unchanged
+// from prior versions, so existing scripts that grep stderr keep working.
+func exitCode(err error) int {
+	if err == nil {
+		return 0
+	}
+	if errors.Is(err, runtime.ErrMissingCredential) || errors.Is(err, runtime.ErrNoModel) {
+		return 2
+	}
+	return 1
 }
 
 func run() error {

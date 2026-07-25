@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -107,6 +108,90 @@ func TestMainEnvFakeOverride(t *testing.T) {
 	if !strings.Contains(string(stdout), "openplus runtime is wired") {
 		t.Errorf("stdout = %q, want fake-provider reply (env should enable --fake)", stdout)
 	}
+}
+
+// --- Change 0004 / T-426: exit-code contract ---
+//
+// 0 = clean, 2 = configuration problem, 1 = everything else.
+//
+// Documented in cmd/openplus/main.go godoc on exitCode().
+
+func TestMainExitCodeClean(t *testing.T) {
+	bin := buildOpenplus(t)
+	cmd := exec.Command(bin, "--fake", "-p", "say hello", "-C", t.TempDir())
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("clean run failed: %v", err)
+	}
+	if code := exitCode(nil); code != 0 {
+		t.Errorf("exitCode(nil) = %d, want 0", code)
+	}
+}
+
+func TestMainExitCodeMissingCredential(t *testing.T) {
+	bin := buildOpenplus(t)
+	// remote provider with no apiKey → ErrMissingCredential
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "opencode.json"), []byte(`{
+  "model": "anthropic/claude-sonnet-5",
+  "provider": {"anthropic": {"options": {}}}
+}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(bin, "-p", "say hello", "-C", dir)
+	code := runAndGetExitCode(t, cmd)
+	if code != 2 {
+		t.Errorf("missing-credential exit = %d, want 2\n%s", code, mustCombined(t, cmd))
+	}
+}
+
+func TestMainExitCodeNoModel(t *testing.T) {
+	bin := buildOpenplus(t)
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "opencode.json"), []byte(`{
+  "provider": {"anthropic": {"options": {"apiKey": "k"}}}
+}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(bin, "-p", "say hello", "-C", dir)
+	code := runAndGetExitCode(t, cmd)
+	if code != 2 {
+		t.Errorf("no-model exit = %d, want 2\n%s", code, mustCombined(t, cmd))
+	}
+}
+
+func TestMainExitCodeOther(t *testing.T) {
+	// any non-config error → 1. The cleanest driver is to monkey-test
+	// exitCode directly: errors that are neither ErrMissingCredential
+	// nor ErrNoModel map to 1.
+	if code := exitCode(errors.New("anything else")); code != 1 {
+		t.Errorf("exitCode(plain err) = %d, want 1", code)
+	}
+}
+
+// runAndGetExitCode runs cmd once and returns its exit code, swallowing
+// *exec.ExitError. Other errors fail the test.
+func runAndGetExitCode(t *testing.T, cmd *exec.Cmd) int {
+	t.Helper()
+	err := cmd.Run()
+	if err == nil {
+		return 0
+	}
+	var ee *exec.ExitError
+	if !errors.As(err, &ee) {
+		t.Fatalf("unexpected error (not ExitError): %v", err)
+	}
+	return ee.ExitCode()
+}
+
+// mustCombined re-runs cmd to capture combined output for failure
+// messages. Test fails the helper only when re-running itself fails;
+// the caller is expected to have already exercised cmd via
+// runAndGetExitCode.
+func mustCombined(t *testing.T, cmd *exec.Cmd) []byte {
+	t.Helper()
+	// don't fail the test on a second-run error; just return whatever we got.
+	out, _ := cmd.CombinedOutput()
+	return out
 }
 
 // buildOpenplus compiles the binary into a temp dir and returns its path.
