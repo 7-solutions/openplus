@@ -49,18 +49,17 @@ check_libc() {
     fi
     [ "$is_musl" -eq 1 ] || return 0
 
-    die "this system uses musl libc (Alpine or similar), which the release binaries do not support.
+    die "this system uses musl libc (Alpine or similar), which is not a supported platform.
 
-The binary needs glibc: the Turso database driver loads libturso through
-purego, which requires the dynamic loader even though the build is cgo-free.
-Installing would leave you with a binary that fails with a confusing loader
-error, so this stops here instead.
+OpenPlus targets glibc: the Turso database driver loads libturso through purego,
+which needs the glibc dynamic loader even though the build is cgo-free.
+Installing here would leave you with a binary that fails with a confusing loader
+error, so this stops instead.
 
-Options:
-  - Use a glibc base image: debian:slim, ubuntu, or fedora
-  - Build from source (the same limitation applies — this is documented, not solved):
-      git clone https://github.com/${REPO} && cd openplus
-      CGO_ENABLED=0 go build -o openplus ./cmd/openplus"
+Use a glibc base image — debian:slim, ubuntu, or fedora.
+
+Building from source will not help; the constraint is in a dependency, not the
+build. See https://github.com/${REPO}/blob/main/docs/install.md"
 }
 
 # --- platform detection -------------------------------------------------------

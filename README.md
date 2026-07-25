@@ -152,18 +152,18 @@ Full list: **[docs/commands.md](docs/commands.md)**.
 
 **Not yet proven**
 - Little real-world mileage. Interfaces may move before `v0.1.0`.
-- **The binary links glibc dynamically**, despite `CGO_ENABLED=0`: purego's no-cgo
-  `dlopen` path — how the Turso driver reaches libturso — emits a hard `DT_NEEDED`
-  on `libdl.so.2`. Portable across mainstream glibc distributions, but **it will not
-  run on stock Alpine/musl**; the installer detects musl and says so rather than
-  installing something broken. The "single static binary" goal is not currently met.
-  See [docs/install.md](docs/install.md#alpine-and-other-musl-systems--not-supported)
-  for the analysis and why dropping Turso is the only fix.
 - macOS and arm64 builds are cross-compiled and CI-tested, but have had no manual
   soak testing.
 
 **Not built** (deliberately deferred, each needs its own decision record): voice input,
 MCP marketplace, web/share UI, hosted multi-tenant mode, LSP server auto-install.
+
+### Supported platforms
+
+Linux and macOS on amd64 and arm64, and WSL2. Linux builds target **glibc**;
+musl systems such as Alpine are out of scope, and the installer says so rather
+than installing a binary that cannot run. The reason is recorded in
+[docs/install.md](docs/install.md#alpine-and-other-musl-systems--out-of-scope).
 
 ## Architecture
 
