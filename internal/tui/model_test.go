@@ -3,11 +3,13 @@ package tui
 import (
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/7solutions/openplus/internal/provider"
 )
 
 func newTestModel() Model {
-	return New(nil, "sys", nil)
+	return New(&stubRunner{}, "sys")
 }
 
 func TestApplyEventTextDeltaAccumulates(t *testing.T) {
@@ -66,23 +68,51 @@ func TestApplyEventErrorRecords(t *testing.T) {
 }
 
 func TestSubmitAppendsUserAndStartsBusy(t *testing.T) {
-	m := newTestModel()
+	// The model never owns the user turn on its own — runtime.Session.Run
+	// builds it from the submitted input string and returns the assembled
+	// history in turnDoneMsg. This test drives that end-to-end shape so a
+	// regression in either half (submit's capture or turnDoneMsg's assignment)
+	// surfaces here.
+	r := &stubRunner{reply: "ack"}
+	m := New(r, "sys")
 	m.input.SetValue("hello there")
-	m.submit() // captures input, marks busy, clears input
-	if m.busy != true {
-		t.Fatalf("not busy after submit")
+
+	// enter → submit() captures input + marks busy + clears input,
+	// and returns the tea.Cmd that drives runTurn.
+	mm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = mm.(Model)
+	if !m.busy {
+		t.Fatal("not busy after submit")
 	}
 	if m.input.Value() != "" {
 		t.Fatalf("input not cleared: %q", m.input.Value())
 	}
-	if len(m.history) != 1 {
-		t.Fatalf("history = %v", m.history)
+	if len(m.history) != 0 {
+		t.Fatalf("history must be empty until the runner returns, got %v", m.history)
 	}
-	if m.history[0].Role != provider.RoleUser {
-		t.Fatalf("role = %v", m.history[0].Role)
+	if cmd == nil {
+		t.Fatal("submit should return a turn command")
 	}
-	if m.history[0].Blocks[0].Text != "hello there" {
-		t.Fatalf("user text = %q", m.history[0].Blocks[0].Text)
+
+	// Run the turn synchronously the way the Bubble Tea program would,
+	// then deliver the resulting turnDoneMsg.
+	mm, _ = m.Update(cmd())
+	m = mm.(Model)
+
+	if r.gotInput != "hello there" {
+		t.Errorf("runner input = %q, want the submitted text", r.gotInput)
+	}
+	if m.busy {
+		t.Fatal("model should not be busy after the turn completes")
+	}
+	if len(m.history) != 2 {
+		t.Fatalf("history = %v, want [user, assistant]", m.history)
+	}
+	if m.history[0].Role != provider.RoleUser || m.history[0].Blocks[0].Text != "hello there" {
+		t.Fatalf("history[0] = %+v, want user/hello there", m.history[0])
+	}
+	if m.history[1].Role != provider.RoleAssistant || m.history[1].Blocks[0].Text != "ack" {
+		t.Fatalf("history[1] = %+v, want assistant/ack", m.history[1])
 	}
 }
 
