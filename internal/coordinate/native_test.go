@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/7solutions/openplus/internal/orchestrate"
+	"github.com/7-solutions/openplus/internal/orchestrate"
 )
 
 // gitRepo builds a scratch git repo with one Go file, returning its root.

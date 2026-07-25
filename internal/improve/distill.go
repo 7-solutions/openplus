@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/7solutions/openplus/internal/skills"
+	"github.com/7-solutions/openplus/internal/skills"
 )
 
 // Run is one recorded session's tool-call sequence.

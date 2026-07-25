@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/7solutions/openplus/internal/orchestrate"
+	"github.com/7-solutions/openplus/internal/orchestrate"
 )
 
 // T-1411 — a valid CommonJS source compiles to a Workflow whose phase names

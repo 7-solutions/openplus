@@ -22,7 +22,7 @@ linters:
 
 linters-settings:
   goimports:
-    local-prefixes: github.com/7solutions/openplus
+    local-prefixes: github.com/7-solutions/openplus
   staticcheck:
     checks: ["all"]
 

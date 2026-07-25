@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/7solutions/openplus/internal/coordinate"
-	"github.com/7solutions/openplus/internal/orchestrate"
+	"github.com/7-solutions/openplus/internal/coordinate"
+	"github.com/7-solutions/openplus/internal/orchestrate"
 )
 
 // SubagentTask is one coordinated subagent: what to do, and which code symbols it

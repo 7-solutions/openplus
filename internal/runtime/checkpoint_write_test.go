@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/7solutions/openplus/internal/contextmgr"
-	"github.com/7solutions/openplus/internal/ports"
+	"github.com/7-solutions/openplus/internal/contextmgr"
+	"github.com/7-solutions/openplus/internal/ports"
 )
 
 // fakeSession assembles a session on the fake provider with a given window, so

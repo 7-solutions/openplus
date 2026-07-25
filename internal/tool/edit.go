@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/7solutions/openplus/internal/diff"
+	"github.com/7-solutions/openplus/internal/diff"
 )
 
 // Edit performs an exact string replacement in a file. old_string must occur

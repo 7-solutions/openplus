@@ -10,7 +10,7 @@ import (
 	"context"
 	"sync/atomic"
 
-	"github.com/7solutions/openplus/internal/ports"
+	"github.com/7-solutions/openplus/internal/ports"
 )
 
 // Fake is a deterministic, in-memory ports.Provider for tests.

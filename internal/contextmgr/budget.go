@@ -1,6 +1,6 @@
 package contextmgr
 
-import "github.com/7solutions/openplus/internal/ports"
+import "github.com/7-solutions/openplus/internal/ports"
 
 // Input is everything that could enter the context window for one turn, before
 // budgeting. Sections are listed in ADR-0008 priority order.

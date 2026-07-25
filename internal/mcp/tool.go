@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/7solutions/openplus/internal/tool"
+	"github.com/7-solutions/openplus/internal/tool"
 )
 
 // ToolNameSeparator joins a server name and its tool name. Namespacing is not

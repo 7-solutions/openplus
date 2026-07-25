@@ -1,4 +1,4 @@
-module github.com/7solutions/openplus
+module github.com/7-solutions/openplus
 
 go 1.26
 

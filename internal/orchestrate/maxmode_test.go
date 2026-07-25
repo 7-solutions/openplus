@@ -10,8 +10,8 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/7solutions/openplus/internal/ports"
-	portsfake "github.com/7solutions/openplus/internal/ports/providerfake"
+	"github.com/7-solutions/openplus/internal/ports"
+	portsfake "github.com/7-solutions/openplus/internal/ports/providerfake"
 )
 
 // textProvider streams one fixed reply per call, cycling through replies, and
@@ -455,8 +455,8 @@ func TestOrchestrateImportsNoProviderAdapter(t *testing.T) {
 		t.Fatalf("glob: %v", err)
 	}
 	fset := token.NewFileSet()
-	const neutral = `"github.com/7solutions/openplus/internal/ports"
-	portsfake "github.com/7solutions/openplus/internal/ports/providerfake"`
+	const neutral = `"github.com/7-solutions/openplus/internal/ports"
+	portsfake "github.com/7-solutions/openplus/internal/ports/providerfake"`
 	for _, f := range files {
 		if strings.HasSuffix(f, "_test.go") {
 			continue

@@ -10,7 +10,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/7solutions/openplus/internal/ports"
+	"github.com/7-solutions/openplus/internal/ports"
 )
 
 // T-1712: ContrastRatio is the WCAG relative-luminance contrast between two hex

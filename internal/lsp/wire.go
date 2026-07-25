@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/7solutions/openplus/internal/ports"
+	"github.com/7-solutions/openplus/internal/ports"
 	"go.lsp.dev/jsonrpc2"
 )
 

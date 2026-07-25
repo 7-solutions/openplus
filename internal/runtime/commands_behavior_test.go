@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/7solutions/openplus/internal/improve"
-	"github.com/7solutions/openplus/internal/ports"
-	portsfake "github.com/7solutions/openplus/internal/ports/providerfake"
+	"github.com/7-solutions/openplus/internal/improve"
+	"github.com/7-solutions/openplus/internal/ports"
+	portsfake "github.com/7-solutions/openplus/internal/ports/providerfake"
 )
 
 // run dispatches and fails the test on a dispatch error.

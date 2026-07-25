@@ -13,8 +13,8 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/7solutions/openplus/internal/glob"
-	"github.com/7solutions/openplus/internal/ports"
+	"github.com/7-solutions/openplus/internal/glob"
+	"github.com/7-solutions/openplus/internal/ports"
 )
 
 type Decision int

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/7solutions/openplus/internal/orchestrate"
+	"github.com/7-solutions/openplus/internal/orchestrate"
 )
 
 // T-1415 — the sandbox binds only module/exports/state/console.log. require,

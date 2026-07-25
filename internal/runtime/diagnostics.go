@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/7solutions/openplus/internal/ports"
+	"github.com/7-solutions/openplus/internal/ports"
 )
 
 // Automatic diagnostics (change 0026, ADR-0017). The agent should see the

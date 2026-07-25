@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/7solutions/openplus/internal/ports"
+	"github.com/7-solutions/openplus/internal/ports"
 )
 
 func call(name string, input string) ports.ToolCall {

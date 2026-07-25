@@ -9,12 +9,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/7solutions/openplus/internal/embed"
-	"github.com/7solutions/openplus/internal/policy"
-	"github.com/7solutions/openplus/internal/ports"
-	portsfake "github.com/7solutions/openplus/internal/ports/providerfake"
-	"github.com/7solutions/openplus/internal/provider/anthropic"
-	"github.com/7solutions/openplus/internal/provider/openaicompat"
+	"github.com/7-solutions/openplus/internal/embed"
+	"github.com/7-solutions/openplus/internal/policy"
+	"github.com/7-solutions/openplus/internal/ports"
+	portsfake "github.com/7-solutions/openplus/internal/ports/providerfake"
+	"github.com/7-solutions/openplus/internal/provider/anthropic"
+	"github.com/7-solutions/openplus/internal/provider/openaicompat"
 )
 
 func write(t *testing.T, root, rel, content string) {

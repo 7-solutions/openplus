@@ -6,10 +6,10 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/7solutions/openplus/internal/agent"
-	"github.com/7solutions/openplus/internal/jsworkflow"
-	"github.com/7solutions/openplus/internal/orchestrate"
-	"github.com/7solutions/openplus/internal/ports"
+	"github.com/7-solutions/openplus/internal/agent"
+	"github.com/7-solutions/openplus/internal/jsworkflow"
+	"github.com/7-solutions/openplus/internal/orchestrate"
+	"github.com/7-solutions/openplus/internal/ports"
 )
 
 // PreviousPlaceholder is substituted in a phase prompt with the previous phase's

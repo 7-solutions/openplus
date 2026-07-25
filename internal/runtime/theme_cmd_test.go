@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/7solutions/openplus/internal/config"
+	"github.com/7-solutions/openplus/internal/config"
 )
 
 // themeNames mirrors the palettes internal/tui ships. The command depends only on

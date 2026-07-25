@@ -19,11 +19,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/7solutions/openplus/internal/orchestrate"
-	"github.com/7solutions/openplus/internal/policy"
-	"github.com/7solutions/openplus/internal/ports"
-	portsfake "github.com/7solutions/openplus/internal/ports/providerfake"
-	"github.com/7solutions/openplus/internal/tool"
+	"github.com/7-solutions/openplus/internal/orchestrate"
+	"github.com/7-solutions/openplus/internal/policy"
+	"github.com/7-solutions/openplus/internal/ports"
+	portsfake "github.com/7-solutions/openplus/internal/ports/providerfake"
+	"github.com/7-solutions/openplus/internal/tool"
 )
 
 // --- T-430: Memory round-trip across two Sessions ---

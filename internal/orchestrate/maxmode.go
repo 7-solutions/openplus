@@ -14,7 +14,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/7solutions/openplus/internal/ports"
+	"github.com/7-solutions/openplus/internal/ports"
 )
 
 // DefaultSamples is the N used when the caller names none. Three is enough for a

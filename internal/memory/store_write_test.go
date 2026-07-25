@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/7solutions/openplus/internal/embed"
+	"github.com/7-solutions/openplus/internal/embed"
 )
 
 func newTestStore(t *testing.T, dim int) *Store {

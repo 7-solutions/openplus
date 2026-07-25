@@ -5,8 +5,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/7solutions/openplus/internal/policy"
-	"github.com/7solutions/openplus/internal/ports"
+	"github.com/7-solutions/openplus/internal/policy"
+	"github.com/7-solutions/openplus/internal/ports"
 )
 
 // Prompter implements policy.Prompter for the TUI. On Ask it pushes a promptMsg

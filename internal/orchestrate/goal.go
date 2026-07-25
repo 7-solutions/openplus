@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/7solutions/openplus/internal/ports"
+	"github.com/7-solutions/openplus/internal/ports"
 )
 
 // errJudgeBoom is a sentinel used by tests to drive the provider-error path.

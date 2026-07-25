@@ -6,9 +6,9 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/7solutions/openplus/internal/orchestrate"
-	"github.com/7solutions/openplus/internal/ports"
-	portsfake "github.com/7solutions/openplus/internal/ports/providerfake"
+	"github.com/7-solutions/openplus/internal/orchestrate"
+	"github.com/7-solutions/openplus/internal/ports"
+	portsfake "github.com/7-solutions/openplus/internal/ports/providerfake"
 )
 
 // maxSession builds a session whose provider plays n generations followed by the

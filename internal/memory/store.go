@@ -24,7 +24,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/7solutions/openplus/internal/embed"
+	"github.com/7-solutions/openplus/internal/embed"
 
 	// Turso Go bindings register the database/sql driver under "turso".
 	// Importing the package for side effects is the canonical way to

@@ -7,9 +7,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/7solutions/openplus/internal/config"
-	"github.com/7solutions/openplus/internal/mcp"
-	"github.com/7solutions/openplus/internal/tool"
+	"github.com/7-solutions/openplus/internal/config"
+	"github.com/7-solutions/openplus/internal/mcp"
+	"github.com/7-solutions/openplus/internal/tool"
 )
 
 // --- default docs source (change 0025, ADR-0016) ---

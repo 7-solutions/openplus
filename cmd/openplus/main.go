@@ -14,9 +14,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"golang.org/x/term"
 
-	"github.com/7solutions/openplus/internal/ports"
-	"github.com/7solutions/openplus/internal/runtime"
-	"github.com/7solutions/openplus/internal/tui"
+	"github.com/7-solutions/openplus/internal/ports"
+	"github.com/7-solutions/openplus/internal/runtime"
+	"github.com/7-solutions/openplus/internal/tui"
 )
 
 const baseSystemPrompt = "You are OpenPlus, a pure-Go coding agent."

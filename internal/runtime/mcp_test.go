@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/7solutions/openplus/internal/policy"
-	"github.com/7solutions/openplus/internal/ports"
+	"github.com/7-solutions/openplus/internal/policy"
+	"github.com/7-solutions/openplus/internal/ports"
 )
 
 // buildMCPEchoServer compiles the MCP test server used by internal/mcp and

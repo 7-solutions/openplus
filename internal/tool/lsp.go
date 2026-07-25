@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/7solutions/openplus/internal/ports"
+	"github.com/7-solutions/openplus/internal/ports"
 )
 
 // The LSP tools expose the LanguageService port to the model (change 0026,

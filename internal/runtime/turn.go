@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/7solutions/openplus/internal/agent"
-	"github.com/7solutions/openplus/internal/contextmgr"
-	"github.com/7solutions/openplus/internal/improve"
-	"github.com/7solutions/openplus/internal/ports"
+	"github.com/7-solutions/openplus/internal/agent"
+	"github.com/7-solutions/openplus/internal/contextmgr"
+	"github.com/7-solutions/openplus/internal/improve"
+	"github.com/7-solutions/openplus/internal/ports"
 )
 
 // MemoryTopK bounds how many memory chunks are retrieved per turn.

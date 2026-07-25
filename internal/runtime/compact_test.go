@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/7solutions/openplus/internal/orchestrate"
-	"github.com/7solutions/openplus/internal/ports"
-	portsfake "github.com/7solutions/openplus/internal/ports/providerfake"
+	"github.com/7-solutions/openplus/internal/orchestrate"
+	"github.com/7-solutions/openplus/internal/ports"
+	portsfake "github.com/7-solutions/openplus/internal/ports/providerfake"
 )
 
 // msgs builds n user messages with distinguishable text.

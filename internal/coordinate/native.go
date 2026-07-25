@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/7solutions/openplus/internal/orchestrate"
-	"github.com/7solutions/openplus/internal/symbols"
+	"github.com/7-solutions/openplus/internal/orchestrate"
+	"github.com/7-solutions/openplus/internal/symbols"
 )
 
 // defaultLockExpiry is how long a lock lives before it can be reclaimed. Long

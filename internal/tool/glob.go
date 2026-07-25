@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/7solutions/openplus/internal/glob"
+	"github.com/7-solutions/openplus/internal/glob"
 )
 
 // Glob finds files under Root matching a pattern that supports *, ?, and **

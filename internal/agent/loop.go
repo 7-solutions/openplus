@@ -9,9 +9,9 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/7solutions/openplus/internal/policy"
-	"github.com/7solutions/openplus/internal/ports"
-	"github.com/7solutions/openplus/internal/tool"
+	"github.com/7-solutions/openplus/internal/policy"
+	"github.com/7-solutions/openplus/internal/ports"
+	"github.com/7-solutions/openplus/internal/tool"
 )
 
 // Agent wires the three ports together and runs turns until the model stops

@@ -105,7 +105,7 @@ func TestNoExternalOrCgoDependencies(t *testing.T) {
 		}
 		for _, imp := range af.Imports {
 			path := strings.Trim(imp.Path.Value, `"`)
-			if strings.HasPrefix(path, "github.com/7solutions/openplus/") {
+			if strings.HasPrefix(path, "github.com/7-solutions/openplus/") {
 				continue
 			}
 			if path == "C" {

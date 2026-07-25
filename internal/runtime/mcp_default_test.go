@@ -3,7 +3,7 @@ package runtime
 import (
 	"testing"
 
-	"github.com/7solutions/openplus/internal/config"
+	"github.com/7-solutions/openplus/internal/config"
 )
 
 // TestApplyDefaultMCP_InjectsWhenEmpty: a Config with no MCP servers gains

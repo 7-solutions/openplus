@@ -17,7 +17,7 @@ import (
 
 	"github.com/pkoukk/tiktoken-go"
 
-	"github.com/7solutions/openplus/internal/ports"
+	"github.com/7-solutions/openplus/internal/ports"
 )
 
 // Characters-per-token ratios, calibrated against representative English prose

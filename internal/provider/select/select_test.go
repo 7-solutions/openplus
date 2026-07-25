@@ -5,10 +5,10 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/7solutions/openplus/internal/config"
-	"github.com/7solutions/openplus/internal/ports"
-	"github.com/7solutions/openplus/internal/provider/anthropic"
-	"github.com/7solutions/openplus/internal/provider/openaicompat"
+	"github.com/7-solutions/openplus/internal/config"
+	"github.com/7-solutions/openplus/internal/ports"
+	"github.com/7-solutions/openplus/internal/provider/anthropic"
+	"github.com/7-solutions/openplus/internal/provider/openaicompat"
 )
 
 func providers(ps ...config.Provider) map[string]config.Provider {

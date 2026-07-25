@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/7solutions/openplus/internal/orchestrate"
+	"github.com/7-solutions/openplus/internal/orchestrate"
 )
 
 // T-1416 + T-1417 — LoadFile reads testdata/example.js, compiles it, and runs it

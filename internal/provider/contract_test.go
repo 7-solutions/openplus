@@ -14,9 +14,9 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/7solutions/openplus/internal/ports"
-	"github.com/7solutions/openplus/internal/provider/anthropic"
-	"github.com/7solutions/openplus/internal/provider/openaicompat"
+	"github.com/7-solutions/openplus/internal/ports"
+	"github.com/7-solutions/openplus/internal/provider/anthropic"
+	"github.com/7-solutions/openplus/internal/provider/openaicompat"
 )
 
 // sharedRequest is the single neutral Request every adapter must accept. Its

@@ -9,11 +9,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/7solutions/openplus/internal/compose"
-	"github.com/7solutions/openplus/internal/config"
-	"github.com/7solutions/openplus/internal/improve"
-	"github.com/7solutions/openplus/internal/orchestrate"
-	"github.com/7solutions/openplus/internal/ports"
+	"github.com/7-solutions/openplus/internal/compose"
+	"github.com/7-solutions/openplus/internal/config"
+	"github.com/7-solutions/openplus/internal/improve"
+	"github.com/7-solutions/openplus/internal/orchestrate"
+	"github.com/7-solutions/openplus/internal/ports"
 )
 
 // builtinCommands is the dispatch table. Every entry closes a milestone

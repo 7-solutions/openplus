@@ -1,5 +1,5 @@
 // Leak guard (T-1808). No file outside internal/provider/ and internal/ports/
-// may import github.com/7solutions/openplus/internal/provider — the adapter
+// may import github.com/7-solutions/openplus/internal/provider — the adapter
 // package is adapter-only after change 0018; core depends on internal/ports.
 // This file is a Go test rather than a build tag, so a violation fails the
 // go test ./... gate instead of producing a less-localized build error.
@@ -38,8 +38,7 @@ func TestNoCoreImportsProviderPackage(t *testing.T) {
 		// but not the adapter package.
 		b, _ := os.ReadFile(path)
 		for line := range strings.SplitSeq(string(b), "\n") {
-			trimmed := strings.TrimSpace(line)
-			if strings.HasPrefix(trimmed, "\"github.com/7solutions/openplus/internal/provider\"") {
+			if importsAdapterPackage(line) {
 				violations = append(violations, path)
 				return nil
 			}
@@ -81,14 +80,14 @@ func TestCmdUsesOnlySelectAdapter(t *testing.T) {
 		b, _ := os.ReadFile(path)
 		for line := range strings.SplitSeq(string(b), "\n") {
 			trimmed := strings.TrimSpace(line)
-			if !strings.HasPrefix(trimmed, "\"github.com/7solutions/openplus/internal/provider") {
+			if !strings.HasPrefix(trimmed, "\"github.com/7-solutions/openplus/internal/provider") {
 				continue
 			}
-			if trimmed == "\"github.com/7solutions/openplus/internal/provider\"" {
+			if trimmed == "\"github.com/7-solutions/openplus/internal/provider\"" {
 				t.Fatalf("cmd must not import the adapter package directly: %s", path)
 			}
 			// internal/provider/<sub>/ — extract sub
-			rest := strings.TrimPrefix(trimmed, "\"github.com/7solutions/openplus/")
+			rest := strings.TrimPrefix(trimmed, "\"github.com/7-solutions/openplus/")
 			end := strings.Index(rest, "\"")
 			if end < 0 {
 				continue
@@ -104,6 +103,46 @@ func TestCmdUsesOnlySelectAdapter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+}
+
+// adapterImportPath is the package core may not import.
+const adapterImportPath = `"github.com/7-solutions/openplus/internal/provider"`
+
+// importsAdapterPackage reports whether one source line imports the adapter
+// package in any of Go's import forms:
+//
+//	"…/internal/provider"       plain
+//	_ "…/internal/provider"     blank, for side effects
+//	p "…/internal/provider"     aliased
+//	. "…/internal/provider"     dot
+//
+// Matching only the plain form left a hole: a blank import pulls the adapter
+// and its transitive dependencies into a core package just as surely, and it is
+// exactly what someone reaches for to register a driver. A comment mentioning
+// the path is not an import, so the quoted path must end the line.
+func importsAdapterPackage(line string) bool {
+	trimmed := strings.TrimSpace(line)
+	if strings.HasPrefix(trimmed, "//") {
+		return false
+	}
+	if !strings.HasSuffix(trimmed, adapterImportPath) {
+		return false
+	}
+	// Whatever precedes the quoted path must be an import prefix, not code.
+	prefix := strings.TrimSpace(strings.TrimSuffix(trimmed, adapterImportPath))
+	switch prefix {
+	case "", "_", ".":
+		return true
+	}
+	// An alias: a single identifier.
+	for i, r := range prefix {
+		isLetter := r == '_' || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z')
+		isDigit := r >= '0' && r <= '9'
+		if !isLetter && !(i > 0 && isDigit) {
+			return false
+		}
+	}
+	return true
 }
 
 // findModuleRoot returns the directory containing go.mod.

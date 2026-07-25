@@ -200,7 +200,7 @@ func buildOpenplus(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	bin := filepath.Join(dir, "openplus")
-	cmd := exec.Command("go", "build", "-o", bin, "github.com/7solutions/openplus/cmd/openplus")
+	cmd := exec.Command("go", "build", "-o", bin, "github.com/7-solutions/openplus/cmd/openplus")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("go build: %v\n%s", err, out)
 	}

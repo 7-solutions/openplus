@@ -7,11 +7,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/7solutions/openplus/internal/agent"
-	"github.com/7solutions/openplus/internal/orchestrate"
-	"github.com/7solutions/openplus/internal/policy"
-	"github.com/7solutions/openplus/internal/ports"
-	"github.com/7solutions/openplus/internal/tool"
+	"github.com/7-solutions/openplus/internal/agent"
+	"github.com/7-solutions/openplus/internal/orchestrate"
+	"github.com/7-solutions/openplus/internal/policy"
+	"github.com/7-solutions/openplus/internal/ports"
+	"github.com/7-solutions/openplus/internal/tool"
 )
 
 // Bounds on fan-out. Each subagent is a full agent turn against the provider, so

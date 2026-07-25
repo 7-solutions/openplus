@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/7solutions/openplus/internal/tool"
+	"github.com/7-solutions/openplus/internal/tool"
 )
 
 // T-1517: a server's tool becomes a tool.Tool named "<server>.<tool>", and

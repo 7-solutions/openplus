@@ -14,10 +14,10 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/7solutions/openplus/internal/config"
-	"github.com/7solutions/openplus/internal/ports"
-	"github.com/7solutions/openplus/internal/provider/anthropic"
-	"github.com/7solutions/openplus/internal/provider/openaicompat"
+	"github.com/7-solutions/openplus/internal/config"
+	"github.com/7-solutions/openplus/internal/ports"
+	"github.com/7-solutions/openplus/internal/provider/anthropic"
+	"github.com/7-solutions/openplus/internal/provider/openaicompat"
 )
 
 // Sentinel errors returned by Select. Wrap with errors.Is to distinguish

@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/7solutions/openplus/internal/config"
-	"github.com/7solutions/openplus/internal/ports"
+	"github.com/7-solutions/openplus/internal/config"
+	"github.com/7-solutions/openplus/internal/ports"
 )
 
 // Manager routes code-intelligence questions to the language server that

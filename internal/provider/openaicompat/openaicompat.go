@@ -20,8 +20,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/7solutions/openplus/internal/ports"
-	"github.com/7solutions/openplus/internal/provider"
+	"github.com/7-solutions/openplus/internal/ports"
+	"github.com/7-solutions/openplus/internal/provider"
 )
 
 // DefaultBaseURL is the public OpenAI API root (includes /v1, as opencode.json

@@ -82,13 +82,16 @@ tar -xzf openplus_${VERSION}_linux_amd64.tar.gz
 sudo mv openplus /usr/local/bin/
 ```
 
-## `go install` — not currently supported
+## With `go install`
 
-The module declares `github.com/7solutions/openplus` (no hyphen) while the
-repository is at `github.com/7-solutions/openplus` (with one). The Go module proxy
-resolves the declared path, which 404s, so `go install` fails. Renaming the module
-touches every import in the project and is tracked separately. Use the installer or
-build from source.
+```bash
+go install github.com/7-solutions/openplus/cmd/openplus@latest
+```
+
+Requires Go 1.26 or newer. The binary lands in `$(go env GOPATH)/bin`.
+
+This does not stamp a version, so `openplus --version` reports `dev`. Use the
+installer or a release archive if you want a version-stamped build.
 
 ## Platform notes
 

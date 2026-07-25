@@ -4,10 +4,10 @@ import (
 	"context"
 	"testing"
 
-	"github.com/7solutions/openplus/internal/policy"
-	"github.com/7solutions/openplus/internal/ports"
-	portsfake "github.com/7solutions/openplus/internal/ports/providerfake"
-	"github.com/7solutions/openplus/internal/tool"
+	"github.com/7-solutions/openplus/internal/policy"
+	"github.com/7-solutions/openplus/internal/ports"
+	portsfake "github.com/7-solutions/openplus/internal/ports/providerfake"
+	"github.com/7-solutions/openplus/internal/tool"
 )
 
 // This test is the acceptance test for spec: openspec/specs/agent-loop —

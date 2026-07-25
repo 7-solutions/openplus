@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/7solutions/openplus/internal/ports"
-	portsfake "github.com/7solutions/openplus/internal/ports/providerfake"
+	"github.com/7-solutions/openplus/internal/ports"
+	portsfake "github.com/7-solutions/openplus/internal/ports/providerfake"
 )
 
 // extractorSays builds a Fake provider that streams one extraction reply.

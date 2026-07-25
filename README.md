@@ -39,15 +39,13 @@ OPENPLUS_VERSION=v0.0.1-alpha curl -fsSL https://raw.githubusercontent.com/7-sol
 # Choose the directory
 OPENPLUS_INSTALL=$HOME/bin curl -fsSL https://raw.githubusercontent.com/7-solutions/openplus/main/scripts/install.sh | sh
 
+# With Go
+go install github.com/7-solutions/openplus/cmd/openplus@latest
+
 # From source
 git clone https://github.com/7-solutions/openplus && cd openplus
 CGO_ENABLED=0 go build -o openplus ./cmd/openplus
 ```
-
-> `go install` does not work yet: the module declares
-> `github.com/7solutions/openplus` (no hyphen) while the repository lives at
-> `github.com/7-solutions/openplus`, so the Go proxy cannot resolve it. Fixing it
-> means renaming the module across every import — tracked as its own change.
 
 **Native Windows is not supported.** Use WSL2 and install from inside your Linux
 distribution.

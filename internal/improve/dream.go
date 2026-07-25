@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/7solutions/openplus/internal/ports"
+	"github.com/7-solutions/openplus/internal/ports"
 )
 
 // errDreamBoom is a sentinel used by tests to drive the provider-error path.

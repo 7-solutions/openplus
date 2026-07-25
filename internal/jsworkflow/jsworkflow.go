@@ -30,7 +30,7 @@ import (
 
 	"github.com/dop251/goja"
 
-	"github.com/7solutions/openplus/internal/orchestrate"
+	"github.com/7-solutions/openplus/internal/orchestrate"
 )
 
 // Compiled is a JS workflow ready to run, with its declared name (the key a

@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/7solutions/openplus/internal/contextmgr"
-	"github.com/7solutions/openplus/internal/ports"
+	"github.com/7-solutions/openplus/internal/contextmgr"
+	"github.com/7-solutions/openplus/internal/ports"
 )
 
 // windowConfig is a project whose context window is small enough that a short
