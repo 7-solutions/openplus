@@ -5,30 +5,39 @@
 > Sub-scope markers (A/B/C/D) match the proposal; commit each slice as its own PR.
 
 ## A — Embedder config deltas
-- [ ] T-400 RED `TestEmbedderEnvOverridesFile`: write `opencode.json` with
+- [x] T-400 RED `TestEmbedderEnvOverridesFile`: write `opencode.json` with
       embedder.model=`file-model` and setenv `OPENPLUS_EMBED_MODEL=env-model`;
       `cfg.Embedder.Model` must be `env-model`.
-- [ ] T-401 RED `TestEmbedderEnvOverridesOnBaseURL` and
+      Done — 5684a03.
+- [x] T-401 RED `TestEmbedderEnvOverridesOnBaseURL` and
       `TestEmbedderEnvOverridesOnAPIKey`: same pattern for the other two
       fields.
-- [ ] T-402 Make the three env overrides pass. `Config.Load` (or a new
+      Done — 5684a03.
+- [x] T-402 Make the three env overrides pass. `Config.Load` (or a new
       `Config.Embedder.resolve()` helper) layers env on top of the parsed
       file. Same priority model as `OPENAI_API_KEY` in many tools: env
       wins, file is the default.
-- [ ] T-403 RED `TestEmbedderTimeoutApplied`: drive `Local.Embed` against an
+      Done — 5684a03.
+- [x] T-403 RED `TestEmbedderTimeoutApplied`: drive `Local.Embed` against an
       `httptest.Server` that hangs; assert the call returns within the
       configured timeout (e.g. 50ms).
-- [ ] T-404 Add `Embedder.Timeout` (default 30s) and plumb it into the
+      Done — 3acf98c.
+- [x] T-404 Add `Embedder.Timeout` (default 30s) and plumb it into the
       `http.Client` used by `Local`. `nil` `http.Client` becomes
       `&http.Client{Timeout: cfg.Embedder.Timeout}`.
-- [ ] T-405 RED `TestLocalErrDimensionDrift`: first `Embed` returns dim=4,
+      Done — 3acf98c.
+- [x] T-405 RED `TestLocalErrDimensionDrift`: first `Embed` returns dim=4,
       second returns dim=8; assert `errors.Is(err, embed.ErrDimensionDrift)`.
-- [ ] T-406 Introduce `ErrDimensionDrift` and surface it from `Local.Embed`.
-- [ ] T-407 RED `TestLocalFallbackOnTransport`: first endpoint returns
+      Done — 09199d7.
+- [x] T-406 Introduce `ErrDimensionDrift` and surface it from `Local.Embed`.
+      Done — 09199d7.
+- [x] T-407 RED `TestLocalFallbackOnTransport`: first endpoint returns
       500 (transport-class failure); second endpoint returns 200; assert
       `vecs` from the second endpoint.
-- [ ] T-408 Add `FallbackTo(embed.Embedder)` method; only triggers on
+      Done — 471ee1c.
+- [x] T-408 Add `FallbackTo(embed.Embedder)` method; only triggers on
       transport-class errors (network, 5xx, 429). Documented in the godoc.
+      Done — 471ee1c.
 
 ## B — Memory config deltas
 - [ ] T-410 RED `TestMemoryAutoOpenFalseMissingPathFails`: assemble with
