@@ -156,36 +156,84 @@ func TestRunCheckpointReflectsUpdatedStatus(t *testing.T) {
 	}
 }
 
-// --- T-822: writing never mutates live context ---
+// --- T-1001: the 0008 purity invariant, narrowed by change 0010 ---
+//
+// Change 0008 asserted that the returned history was byte-identical whether or
+// not a checkpoint was written. Change 0010 breaks that deliberately —
+// compaction shrinks history after a durable write, which is its entire point.
+//
+// The invariant is narrowed rather than abandoned. Two properties survive, and
+// they are the ones that matter when the feature is off or has failed:
+//   - no checkpointing configured  -> history untouched (below)
+//   - checkpoint write failed      -> history untouched (TestRunFailedWrite...)
 
-// TestRunHistoryIdenticalWithAndWithoutCheckpoint is the safety property from
-// the proposal: the write is observationally pure with respect to live context.
-func TestRunHistoryIdenticalWithAndWithoutCheckpoint(t *testing.T) {
-	const msg = "identical either way"
+// TestRunHistoryUntouchedWithoutCheckpointing pins that a session with no window
+// configured is unaffected by any of this machinery.
+func TestRunHistoryUntouchedWithoutCheckpointing(t *testing.T) {
+	const msg = "no window, no interference"
 
-	// window 1: definitely checkpoints
-	withCP := fakeSession(t, 1)
-	gotWith, err := withCP.Run(context.Background(), msg, nil)
-	if err != nil {
-		t.Fatalf("Run (checkpointing): %v", err)
-	}
-	if _, err := os.Stat(checkpointPath(withCP)); err != nil {
-		t.Fatalf("expected a checkpoint to have been written: %v", err)
-	}
-
-	// no window: definitely does not
-	without, err := Assemble(project(t, ""), Options{Fake: true})
+	s, err := Assemble(project(t, ""), Options{Fake: true})
 	if err != nil {
 		t.Fatal(err)
 	}
-	gotWithout, err := without.Run(context.Background(), msg, nil)
+	turn, err := s.AssembleContext(context.Background(), msg, nil)
 	if err != nil {
-		t.Fatalf("Run (no checkpoint): %v", err)
+		t.Fatal(err)
 	}
 
-	if !reflect.DeepEqual(gotWith, gotWithout) {
-		t.Fatalf("checkpointing changed the returned history:\nwith:    %+v\nwithout: %+v",
-			gotWith, gotWithout)
+	got, err := s.Run(context.Background(), msg, nil)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	// With no checkpointer the agent's own output is returned verbatim: the
+	// user turn we assembled is still the first message, nothing prepended.
+	if len(got) == 0 || !reflect.DeepEqual(got[0], turn.History[0]) {
+		t.Fatalf("history was altered with checkpointing off:\nfirst: %+v", got[0])
+	}
+	if _, err := os.Stat(checkpointPath(s)); !os.IsNotExist(err) {
+		t.Error("a checkpoint appeared with no window configured")
+	}
+}
+
+// TestRunFailedWriteLeavesHistoryUntouched is the ordering property from the
+// proposal: durability strictly precedes forgetting. If the checkpoint could not
+// be written, nothing may be dropped — otherwise compaction would destroy
+// material that was never recorded anywhere.
+func TestRunFailedWriteLeavesHistoryUntouched(t *testing.T) {
+	s := fakeSession(t, 1) // window 1: the mark is crossed
+	// Plant a directory where the checkpoint file belongs so the write fails.
+	if err := os.Mkdir(checkpointPath(s), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	var reported error
+	s.OnCheckpointError = func(err error) { reported = err }
+
+	compacted := false
+	s.OnCompact = func(int, int) { compacted = true }
+
+	got, err := s.Run(context.Background(), "the write will fail", nil)
+	if err != nil {
+		t.Fatalf("a failed checkpoint must not fail the turn: %v", err)
+	}
+	if reported == nil {
+		t.Fatal("the failed write was not reported")
+	}
+	if compacted {
+		t.Fatal("history was compacted despite the checkpoint write failing")
+	}
+	// the full exchange is still present
+	var joined strings.Builder
+	for _, m := range got {
+		for _, b := range m.Blocks {
+			joined.WriteString(b.Text)
+			joined.WriteByte(' ')
+		}
+	}
+	if !strings.Contains(joined.String(), "the write will fail") {
+		t.Errorf("user turn lost after a failed write: %q", joined.String())
+	}
+	if strings.Contains(joined.String(), "compact") {
+		t.Errorf("a compaction marker appeared after a failed write: %q", joined.String())
 	}
 }
 

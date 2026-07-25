@@ -141,6 +141,14 @@ type Session struct {
 	// know. Nil drops the report rather than failing the turn.
 	OnCheckpointError func(error)
 
+	// KeepRecent bounds how many trailing messages survive compaction
+	// (change 0010). Zero uses DefaultKeepRecent.
+	KeepRecent int
+	// OnCompact reports a compaction as (before, after) message counts, so a
+	// front-end can tell the user rather than the context shrinking invisibly.
+	// Nil is a no-op.
+	OnCompact func(before, after int)
+
 	// Memo is the file-based memory surface: MEMORY.md, notes.md, and
 	// tasks/<id>/progress.md under the project root (ADR-0002 #1). /dream
 	// appends extracted facts here.

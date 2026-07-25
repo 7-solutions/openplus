@@ -52,6 +52,13 @@ type promptMsg struct {
 	call provider.ToolCall
 }
 
+// NoticeMsg is a session-level event the user needs to see but that is not
+// conversation: context was compacted, a checkpoint failed. Sent via
+// program.Send so it lands in the transcript in order.
+type NoticeMsg struct {
+	Text string
+}
+
 // Model is the Bubble Tea model.
 type Model struct {
 	runner  Runner
@@ -117,6 +124,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case promptMsg:
 		m.pending = &msg.call
+		return m, nil
+
+	case NoticeMsg:
+		// Flush any half-rendered assistant text first, so a notice cannot
+		// interleave with the message it interrupted.
+		m.flushText()
+		m.log = append(m.log, "· "+msg.Text)
 		return m, nil
 
 	case turnDoneMsg:

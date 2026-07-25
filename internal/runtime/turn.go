@@ -163,7 +163,20 @@ func (s *Session) Run(ctx context.Context, userMsg string, history []provider.Me
 
 	s.persist(ctx, userMsg, final)
 	s.record(final)
-	s.maybeCheckpoint(turn.Used, final)
+
+	// Durability strictly precedes forgetting (change 0010): compact only once
+	// the dropped material is safely in checkpoint.md.
+	if s.maybeCheckpoint(turn.Used, final) {
+		if compacted := s.compact(final); len(compacted) < len(final) {
+			if s.OnCompact != nil {
+				s.OnCompact(len(final), len(compacted))
+			}
+			final = compacted
+			// Keep the session's own record in step with what the caller gets,
+			// so /dream and the next turn see the same history.
+			s.History = final
+		}
+	}
 	return final, nil
 }
 
@@ -190,25 +203,72 @@ func (s *Session) record(final []provider.Message) {
 }
 
 // maybeCheckpoint writes a checkpoint when the assembled context crossed the
-// high-water mark (ADR-0008). It runs after the turn completes, so a crash
-// mid-turn cannot record a half-finished state, and it never touches `final` —
-// the returned history is identical whether or not a checkpoint was written.
+// high-water mark (ADR-0008), reporting whether it wrote. It runs after the turn
+// completes, so a crash mid-turn cannot record a half-finished state.
+//
+// The bool is what change 0010's compaction gates on: history may only be
+// shrunk once it is durably recorded, so a false return must leave the live
+// history alone.
 //
 // A write failure is reported rather than returned: the turn already produced
 // value for the user, but losing durability is something the operator must know
 // about, so it goes to OnCheckpointError instead of being dropped.
-func (s *Session) maybeCheckpoint(used int, history []provider.Message) {
+func (s *Session) maybeCheckpoint(used int, history []provider.Message) (wrote bool) {
 	if s.Checkpointer == nil || !s.Checkpointer.ShouldCheckpoint(used) {
-		return
+		return false
 	}
 	err := s.Checkpointer.Write(contextmgr.Checkpoint{
 		Summary: buildSummary(history),
 		Tasks:   s.Tasks,
 		Recent:  history,
 	})
-	if err != nil && s.OnCheckpointError != nil {
-		s.OnCheckpointError(err)
+	if err != nil {
+		if s.OnCheckpointError != nil {
+			s.OnCheckpointError(err)
+		}
+		return false
 	}
+	return true
+}
+
+// DefaultKeepRecent is how many trailing messages survive compaction when
+// KeepRecent is unset. Enough that the immediate exchange is never lost.
+const DefaultKeepRecent = 6
+
+// compact replaces older messages with a marker pointing at the checkpoint that
+// now holds them, keeping the most recent KeepRecent messages.
+//
+// Callers must only reach this after a *successful* checkpoint write: compaction
+// is forgetting, and forgetting material that was never written down is data
+// loss. A history at or under the keep-count is returned untouched, since there
+// is nothing worth dropping.
+func (s *Session) compact(history []provider.Message) []provider.Message {
+	keep := s.KeepRecent
+	if keep <= 0 {
+		keep = DefaultKeepRecent
+	}
+	if len(history) <= keep {
+		return history
+	}
+
+	dropped := len(history) - keep
+	marker := provider.Message{
+		Role: provider.RoleUser,
+		Blocks: []provider.Block{{
+			Kind: provider.BlockText,
+			// Bracketed and explicit: the model and any human reading the
+			// transcript must both see that material was moved, not lost, and
+			// where it went.
+			Text: fmt.Sprintf(
+				"[context compacted: %d earlier message(s) moved to checkpoint.md in the project root; "+
+					"read that file if you need what came before]", dropped),
+		}},
+	}
+
+	out := make([]provider.Message, 0, keep+1)
+	out = append(out, marker)
+	out = append(out, history[len(history)-keep:]...)
+	return out
 }
 
 // SummaryCap bounds the checkpoint summary in characters. The summary is the

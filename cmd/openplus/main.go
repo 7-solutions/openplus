@@ -138,6 +138,15 @@ func runOnce(session *runtime.Session, prompt string) error {
 		}
 		fmt.Fprintf(os.Stderr, "\n· %s\n", call.Name)
 	}
+	// Compaction and a lost checkpoint both change what the session can
+	// remember, so neither may happen silently.
+	session.OnCompact = func(before, after int) {
+		fmt.Fprintf(os.Stderr, "\n· context compacted: %d → %d messages (earlier turns are in checkpoint.md)\n",
+			before, after)
+	}
+	session.OnCheckpointError = func(err error) {
+		fmt.Fprintf(os.Stderr, "\n! checkpoint failed, session is not durable: %v\n", err)
+	}
 
 	// A slash command runs locally, with no model round-trip (change 0009).
 	out, handled, err := session.Dispatch(context.Background(), prompt)
@@ -166,6 +175,13 @@ func runTUI(session *runtime.Session) error {
 	session.OnEvent = func(ev provider.Event) { p.Send(tui.StreamMsg(ev)) }
 	session.OnToolResult = func(call provider.ToolCall, res provider.Block) {
 		p.Send(tui.ToolResultMsg{Call: call, Result: res})
+	}
+	session.OnCompact = func(before, after int) {
+		p.Send(tui.NoticeMsg{Text: fmt.Sprintf(
+			"context compacted: %d → %d messages (earlier turns are in checkpoint.md)", before, after)})
+	}
+	session.OnCheckpointError = func(err error) {
+		p.Send(tui.NoticeMsg{Text: fmt.Sprintf("checkpoint failed, session is not durable: %v", err)})
 	}
 	session.SetPrompter(tui.NewPrompter(p.Send, answer))
 
