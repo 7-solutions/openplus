@@ -8,6 +8,7 @@
 package runtime
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -19,6 +20,7 @@ import (
 	"github.com/7solutions/openplus/internal/coordinate"
 	"github.com/7solutions/openplus/internal/embed"
 	"github.com/7solutions/openplus/internal/improve"
+	"github.com/7solutions/openplus/internal/mcp"
 	"github.com/7solutions/openplus/internal/memo"
 	"github.com/7solutions/openplus/internal/memory"
 	"github.com/7solutions/openplus/internal/orchestrate"
@@ -200,6 +202,14 @@ type Session struct {
 	// pretending to switch — theming is a front-end capability.
 	Theme Themer
 
+	// MCPWarnings records each declared MCP server that could not be used, by
+	// name (change 0015). A broken server is skipped rather than fatal, so the
+	// front-end must surface these — otherwise its tools go missing silently.
+	MCPWarnings []string
+
+	// mcpClients holds the connected MCP servers, stopped by Close.
+	mcpClients []*mcp.Client
+
 	// extraCommands holds session-local command registrations. Builtins always
 	// win, so a registration cannot hijack /help.
 	extraCommands map[string]Command
@@ -264,11 +274,17 @@ func Assemble(root string, opts Options) (*Session, error) {
 		MaxJudgeIterations: opts.MaxJudgeIterations,
 	}
 
-	// Tools: the full builtin set, plus their neutral schemas for the model.
-	s.Tools = tool.NewRegistry(
+	// Tools: the full builtin set, plus any MCP server's tools, plus their
+	// neutral schemas for the model. MCP tools are ordinary registry entries —
+	// they take the same loop path and the same PolicyGate as a builtin.
+	tools := []tool.Tool{
 		tool.Read{}, tool.Write{}, tool.Edit{}, tool.Bash{},
 		tool.Glob{Root: root}, tool.Grep{Root: root},
-	)
+	}
+	mcpTools, warnings := s.startMCPServers(context.Background(), pc.Config.MCP)
+	s.MCPWarnings = warnings
+	tools = append(tools, mcpTools...)
+	s.Tools = tool.NewRegistry(tools...)
 	s.ToolSchemas = toolSchemas(s.Tools)
 
 	// Provider.
@@ -426,13 +442,23 @@ func (s *Session) assembleMemory() error {
 	return nil
 }
 
-// Close releases the session's resources. Safe to call when memory was never
-// opened.
+// Close releases the session's resources: the memory store and every MCP server
+// it started. Safe to call when memory was never opened, and idempotent.
+//
+// Both are closed even if the first fails — a leaked subprocess or an unflushed
+// store is worse than a lost error message, so only the first error is returned.
 func (s *Session) Close() error {
-	if s.Memory == nil {
-		return nil
+	var firstErr error
+	if s.Memory != nil {
+		if err := s.Memory.Close(); err != nil {
+			firstErr = err
+		}
+		s.Memory = nil
 	}
-	return s.Memory.Close()
+	if err := s.closeMCP(); err != nil && firstErr == nil {
+		firstErr = err
+	}
+	return firstErr
 }
 
 // buildGate turns configured permission rules into a Gate, returning the

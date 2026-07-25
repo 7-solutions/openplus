@@ -237,3 +237,92 @@ func TestSetTUITheme(t *testing.T) {
 		t.Fatalf("new file Theme = %q", cfg.TUI.Theme)
 	}
 }
+
+// T-1519: the mcp section declares stdio and http servers, with {env:VAR}
+// expansion in the places a secret actually goes.
+func TestLoadMCPServers(t *testing.T) {
+	t.Setenv("MCP_TOKEN", "sk-mcp")
+	t.Setenv("MCP_HOME", "/tmp/mcphome")
+	p := writeFixture(t, "opencode.json", `{
+  "model": "a/b",
+  "mcp": {
+    "ci": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@mcp/server"],
+      "env": {"HOME": "{env:MCP_HOME}"},
+      "dir": "sub"
+    },
+    "search": {
+      "transport": "http",
+      "url": "https://x/mcp",
+      "headers": {"Authorization": "Bearer {env:MCP_TOKEN}"}
+    }
+  }
+}`)
+	cfg, err := Load(p)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(cfg.MCP) != 2 {
+		t.Fatalf("got %d servers, want 2: %+v", len(cfg.MCP), cfg.MCP)
+	}
+
+	ci := cfg.MCP["ci"]
+	if ci.Transport != MCPTransportStdio {
+		t.Errorf("ci transport = %q", ci.Transport)
+	}
+	if ci.Command != "npx" || len(ci.Args) != 2 || ci.Args[1] != "@mcp/server" {
+		t.Errorf("ci command/args = %q %v", ci.Command, ci.Args)
+	}
+	if ci.Env["HOME"] != "/tmp/mcphome" {
+		t.Errorf("ci env not expanded: %v", ci.Env)
+	}
+	if ci.Dir != "sub" {
+		t.Errorf("ci dir = %q", ci.Dir)
+	}
+
+	search := cfg.MCP["search"]
+	if search.Transport != MCPTransportHTTP {
+		t.Errorf("search transport = %q", search.Transport)
+	}
+	if search.URL != "https://x/mcp" {
+		t.Errorf("search url = %q", search.URL)
+	}
+	if search.Headers["Authorization"] != "Bearer sk-mcp" {
+		t.Errorf("search header not expanded: %v", search.Headers)
+	}
+}
+
+// T-1519: a bad or incomplete server declaration errors, naming the server.
+func TestLoadMCPRejectsBadServer(t *testing.T) {
+	cases := map[string]string{
+		"unknown transport": `{"mcp":{"weird":{"transport":"grpc","url":"x"}}}`,
+		"stdio no command":  `{"mcp":{"weird":{"transport":"stdio"}}}`,
+		"http no url":       `{"mcp":{"weird":{"transport":"http"}}}`,
+		"no transport":      `{"mcp":{"weird":{}}}`,
+	}
+	for name, doc := range cases {
+		p := writeFixture(t, "opencode.json", doc)
+		_, err := Load(p)
+		if err == nil {
+			t.Errorf("%s: Load should error", name)
+			continue
+		}
+		if !strings.Contains(err.Error(), "weird") {
+			t.Errorf("%s: error should name the server: %v", name, err)
+		}
+	}
+}
+
+// T-1519: no mcp section means no servers, not an error.
+func TestLoadMCPAbsent(t *testing.T) {
+	p := writeFixture(t, "opencode.json", `{"model":"a/b"}`)
+	cfg, err := Load(p)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(cfg.MCP) != 0 {
+		t.Fatalf("MCP = %+v, want empty", cfg.MCP)
+	}
+}

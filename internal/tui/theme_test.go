@@ -18,8 +18,8 @@ import (
 // depends on.
 func TestContrastRatio(t *testing.T) {
 	tests := []struct {
-		name      string
-		a, b      string
+		name       string
+		a, b       string
 		wantApprox float64
 	}{
 		{"black on white", "#000000", "#ffffff", 21.0},

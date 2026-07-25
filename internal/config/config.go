@@ -52,6 +52,40 @@ type Config struct {
 
 	// Max configures Max Mode, the best-of-N sampler (change 0016).
 	Max Max
+
+	// MCP maps a server name to its declaration (change 0015). Empty means no
+	// MCP servers. The name prefixes that server's tool names.
+	MCP map[string]MCPServer
+}
+
+// MCP transport names. Anything else is a config error: silently defaulting would
+// start a server the user did not describe.
+const (
+	MCPTransportStdio = "stdio"
+	MCPTransportHTTP  = "http"
+)
+
+// MCPServer is one declared MCP server (change 0015, ADR-0010). Stdio fields and
+// HTTP fields are mutually exclusive in practice; Transport selects which apply.
+//
+// Note what this is: a stdio server is an arbitrary executable and an http server
+// an arbitrary endpoint, both named by the user. Their tools go through the
+// PolicyGate like any other.
+type MCPServer struct {
+	// Name is the config key, carried here so an error can name the server.
+	Name string
+	// Transport is MCPTransportStdio or MCPTransportHTTP.
+	Transport string
+
+	// Command, Args, Env and Dir describe a stdio subprocess.
+	Command string
+	Args    []string
+	Env     map[string]string
+	Dir     string
+
+	// URL and Headers describe a streamable-HTTP endpoint.
+	URL     string
+	Headers map[string]string
 }
 
 // Max is the Max Mode configuration (change 0016, ADR-0011). Max Mode is opt-in
@@ -220,6 +254,12 @@ func Load(path string) (*Config, error) {
 	cfg.Embedder.applyEnvOverrides()
 	cfg.Memory.applyEnvOverrides()
 
+	servers, err := parseMCP(doc.MCP)
+	if err != nil {
+		return nil, fmt.Errorf("config: %s: %w", path, err)
+	}
+	cfg.MCP = servers
+
 	for id, rp := range doc.Provider {
 		cfg.Providers[id] = Provider{
 			ID:      id,
@@ -370,6 +410,73 @@ type rawConfig struct {
 		Samples int    `json:"samples"`
 		Model   string `json:"model"`
 	} `json:"max"`
+	MCP map[string]rawMCPServer `json:"mcp"`
+}
+
+type rawMCPServer struct {
+	Transport string            `json:"transport"`
+	Command   string            `json:"command"`
+	Args      []string          `json:"args"`
+	Env       map[string]string `json:"env"`
+	Dir       string            `json:"dir"`
+	URL       string            `json:"url"`
+	Headers   map[string]string `json:"headers"`
+}
+
+// parseMCP validates every declared server and expands {env:VAR} in the fields
+// that carry secrets or paths. An incomplete or unknown declaration is an error
+// naming the server: starting a subprocess the user did not fully describe, or
+// silently skipping one they did, are both worse than refusing to load.
+func parseMCP(raw map[string]rawMCPServer) (map[string]MCPServer, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	out := make(map[string]MCPServer, len(raw))
+	for name, rs := range raw {
+		s := MCPServer{
+			Name:      name,
+			Transport: rs.Transport,
+			Command:   expandEnv(rs.Command),
+			Dir:       rs.Dir,
+			URL:       expandEnv(rs.URL),
+			Env:       expandEnvMap(rs.Env),
+			Headers:   expandEnvMap(rs.Headers),
+		}
+		for _, a := range rs.Args {
+			s.Args = append(s.Args, expandEnv(a))
+		}
+
+		switch s.Transport {
+		case MCPTransportStdio:
+			if s.Command == "" {
+				return nil, fmt.Errorf("mcp server %q: stdio transport needs a \"command\"", name)
+			}
+		case MCPTransportHTTP:
+			if s.URL == "" {
+				return nil, fmt.Errorf("mcp server %q: http transport needs a \"url\"", name)
+			}
+		case "":
+			return nil, fmt.Errorf("mcp server %q: missing \"transport\" (%q or %q)",
+				name, MCPTransportStdio, MCPTransportHTTP)
+		default:
+			return nil, fmt.Errorf("mcp server %q: unknown transport %q (want %q or %q)",
+				name, s.Transport, MCPTransportStdio, MCPTransportHTTP)
+		}
+		out[name] = s
+	}
+	return out, nil
+}
+
+// expandEnvMap expands {env:VAR} in every value of a string map.
+func expandEnvMap(in map[string]string) map[string]string {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(in))
+	for k, v := range in {
+		out[k] = expandEnv(v)
+	}
+	return out
 }
 
 type rawProvider struct {

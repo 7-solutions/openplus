@@ -113,6 +113,12 @@ func run() error {
 		fmt.Fprintln(os.Stderr, "warning: --dangerously-skip-permissions active (allow-all base)")
 	}
 
+	// A declared MCP server that could not be used is skipped, not fatal — but
+	// its tools are missing, so the user has to be told which one and why.
+	for _, w := range session.MCPWarnings {
+		fmt.Fprintf(os.Stderr, "! %s\n", w)
+	}
+
 	// A one-shot prompt, or no TTY, means non-interactive.
 	if prompt != "" || !term.IsTerminal(int(os.Stdin.Fd())) {
 		return runOnce(session, prompt)

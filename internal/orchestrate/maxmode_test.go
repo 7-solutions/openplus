@@ -417,9 +417,9 @@ func TestMaxModeAllCandidatesFailed(t *testing.T) {
 // clamp is reported so the user is not silently given fewer samples.
 func TestClampSamples(t *testing.T) {
 	cases := []struct {
-		in        int
-		want      int
-		wantNote  bool
+		in       int
+		want     int
+		wantNote bool
 	}{
 		{in: 0, want: DefaultSamples},
 		{in: -4, want: DefaultSamples},
