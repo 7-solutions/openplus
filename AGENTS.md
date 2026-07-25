@@ -43,13 +43,19 @@ Checkpointer · PolicyGate · Workflow · LanguageService. Layout is in
 - **Pure Go / cgo-free.** No cgo in the default build (that is why ncruces+wazero, not
   mattn+cgo). Trivial cross-compile; one binary per platform, no build toolchain
   required at install time.
-  **Caveat, measured at v0.0.1-alpha:** the binary is *not* fully static. The Turso
-  driver reaches libturso through `ebitengine/purego`, which needs the dynamic
-  loader, so the binary links glibc (`libdl`, `libpthread`, `libc`) even with
-  `CGO_ENABLED=0`. It requires no versioned GLIBC symbols, so it is portable across
-  mainstream glibc distributions, but it **will not run on stock Alpine/musl**.
-  Full static linkage remains the goal; reaching it means replacing purego-based
-  `dlopen` in the driver path.
+  **Caveat, measured at v0.0.1-alpha:** the binary is *not* fully static. purego's
+  no-cgo Linux path declares `//go:cgo_import_dynamic ... "libdl.so.2"` to reach
+  `dlopen`, which emits a hard `DT_NEEDED` on glibc; the Turso driver depends on it.
+  So the binary links `libdl`/`libpthread`/`libc` even with `CGO_ENABLED=0`. No build
+  flag removes this — it is structural to purego. Confirmed by isolation: this
+  project's binary minus the memory package links statically.
+  It needs no versioned GLIBC symbols, so it is portable across mainstream glibc
+  distributions, but it **will not run on stock Alpine/musl**.
+  **The only fix is dropping Turso.** `modernc.org/sqlite` (already a dependency,
+  serving the FTS5 shadow) is transpiled C→Go and links statically, but lacks
+  `vector32()`/`vector_distance_cos()` — vector search would move to brute-force
+  cosine distance in Go. Deliberately not done: that trades an indexed vector path
+  for musl support. Revisit only if Alpine becomes a real requirement.
 - **Provider neutrality.** The loop and all subsystems use only the neutral model.
   No provider-specific type escapes `internal/provider`.
 - **Wire neutrality at every port — no wire type crosses a seam.** A port's

@@ -32,13 +32,44 @@ need() {
     command -v "$1" >/dev/null 2>&1 || die "required command not found: $1"
 }
 
+# --- libc detection -------------------------------------------------------------
+# The release binaries need glibc. Despite CGO_ENABLED=0, the Turso driver
+# reaches libturso through purego, which emits a hard DT_NEEDED on libdl.so.2.
+# On musl that surfaces as a bare "not found" from the loader, which tells the
+# user nothing — so detect it here and say what is actually wrong.
+check_libc() {
+    is_musl=0
+    # ld-musl-<arch>.so.1 is musl's loader and the most reliable signal.
+    for f in /lib/ld-musl-*.so.1 /usr/lib/ld-musl-*.so.1; do
+        [ -e "$f" ] && is_musl=1 && break
+    done
+    # Fall back to ldd, which prints "musl libc" on Alpine.
+    if [ "$is_musl" -eq 0 ] && command -v ldd >/dev/null 2>&1; then
+        ldd --version 2>&1 | head -n1 | grep -qi musl && is_musl=1
+    fi
+    [ "$is_musl" -eq 1 ] || return 0
+
+    die "this system uses musl libc (Alpine or similar), which the release binaries do not support.
+
+The binary needs glibc: the Turso database driver loads libturso through
+purego, which requires the dynamic loader even though the build is cgo-free.
+Installing would leave you with a binary that fails with a confusing loader
+error, so this stops here instead.
+
+Options:
+  - Use a glibc base image: debian:slim, ubuntu, or fedora
+  - Build from source (the same limitation applies — this is documented, not solved):
+      git clone https://github.com/${REPO} && cd openplus
+      CGO_ENABLED=0 go build -o openplus ./cmd/openplus"
+}
+
 # --- platform detection -------------------------------------------------------
 detect_platform() {
     os=$(uname -s)
     arch=$(uname -m)
 
     case "$os" in
-        Linux)  GOOS=linux ;;
+        Linux)  GOOS=linux; check_libc ;;
         Darwin) GOOS=darwin ;;
         # WSL2 reports Linux, so it needs no special case. These are the
         # Windows-native shells, where this script cannot install a Linux binary.

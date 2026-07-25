@@ -152,10 +152,13 @@ Full list: **[docs/commands.md](docs/commands.md)**.
 
 **Not yet proven**
 - Little real-world mileage. Interfaces may move before `v0.1.0`.
-- **The binary links glibc dynamically**, despite `CGO_ENABLED=0`: the Turso driver
-  reaches libturso through `purego`, which needs the dynamic loader. It is portable
-  across mainstream glibc distributions but **will not run on stock Alpine/musl**.
-  The "single static binary" goal is not currently met.
+- **The binary links glibc dynamically**, despite `CGO_ENABLED=0`: purego's no-cgo
+  `dlopen` path — how the Turso driver reaches libturso — emits a hard `DT_NEEDED`
+  on `libdl.so.2`. Portable across mainstream glibc distributions, but **it will not
+  run on stock Alpine/musl**; the installer detects musl and says so rather than
+  installing something broken. The "single static binary" goal is not currently met.
+  See [docs/install.md](docs/install.md#alpine-and-other-musl-systems--not-supported)
+  for the analysis and why dropping Turso is the only fix.
 - macOS and arm64 builds are cross-compiled and CI-tested, but have had no manual
   soak testing.
 

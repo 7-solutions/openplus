@@ -103,13 +103,36 @@ a Linux binary into a Windows environment.
 
 ### Alpine and other musl systems — not supported
 
-Despite building with `CGO_ENABLED=0`, the binary **links glibc dynamically**. The
-Turso database driver reaches `libturso` through
-[`purego`](https://github.com/ebitengine/purego), which requires the dynamic
-loader. On stock Alpine the binary will fail with a missing-loader error.
+The installer detects musl and stops rather than leaving you with a binary that
+fails at exec time.
 
-Workarounds: use a glibc-based image (`debian:slim`, `ubuntu`), or install
-`gcompat` on Alpine (untested).
+**Why.** Despite `CGO_ENABLED=0`, the binary links glibc. The Turso driver reaches
+`libturso` through [`purego`](https://github.com/ebitengine/purego), whose
+no-cgo Linux path declares:
+
+```go
+//go:cgo_import_dynamic purego_dlopen dlopen "libdl.so.2"
+```
+
+That emits a hard `DT_NEEDED` on glibc's `libdl.so.2`, so the binary requires the
+glibc dynamic loader. It is structural to how purego does `dlopen` on Linux — no
+build flag removes it. Verified: a `CGO_ENABLED=0` binary of this project without
+the memory package **is** statically linked, so purego is the sole cause.
+
+**What to do instead.** Use a glibc base image:
+
+```dockerfile
+FROM debian:stable-slim      # or ubuntu, or fedora
+```
+
+Building from source on Alpine does not help — the same import applies.
+
+**Why it is not fixed.** The only way to drop the glibc requirement is to drop the
+Turso driver. `modernc.org/sqlite` (already used here for the FTS5 shadow index) is
+transpiled C→Go, needs no `dlopen`, and does link statically — but it has no
+`vector32()` or `vector_distance_cos()`, so vector search would have to move into
+Go. That trades a working, indexed vector path for brute-force cosine distance.
+Not worth it for musl support alone; revisit if Alpine becomes a real requirement.
 
 ### macOS
 
