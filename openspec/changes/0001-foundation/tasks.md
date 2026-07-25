@@ -63,9 +63,9 @@
 - [x] T-063 Task tree (T1/T1.1) persisted + restored across checkpoints.
 
 ## M7 — Orchestration (ADR-0006)
-- [ ] T-070 Subagent runner: parallel, cancellable, git-worktree isolation.
-- [ ] T-071 Go-native Workflow engine: phases + bounded retries + hand-off.
-- [ ] T-072 Goal/stop-condition with independent judge model.
+- [x] T-070 Subagent runner: parallel, cancellable, git-worktree isolation.
+- [x] T-071 Go-native Workflow engine: phases + bounded retries + hand-off.
+- [x] T-072 Goal/stop-condition with independent judge model.
 
 ## M8 — Compose (ADR-0002)
 - [ ] T-080 Compose phase machine: grill→spec→implement→verify→review→finish.
