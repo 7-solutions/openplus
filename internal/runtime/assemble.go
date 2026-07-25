@@ -13,9 +13,12 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/7solutions/openplus/internal/compose"
 	"github.com/7solutions/openplus/internal/config"
 	"github.com/7solutions/openplus/internal/contextmgr"
 	"github.com/7solutions/openplus/internal/embed"
+	"github.com/7solutions/openplus/internal/improve"
+	"github.com/7solutions/openplus/internal/memo"
 	"github.com/7solutions/openplus/internal/memory"
 	"github.com/7solutions/openplus/internal/orchestrate"
 	"github.com/7solutions/openplus/internal/policy"
@@ -137,6 +140,26 @@ type Session struct {
 	// succeeded, but the session is no longer durable, so the operator needs to
 	// know. Nil drops the report rather than failing the turn.
 	OnCheckpointError func(error)
+
+	// Memo is the file-based memory surface: MEMORY.md, notes.md, and
+	// tasks/<id>/progress.md under the project root (ADR-0002 #1). /dream
+	// appends extracted facts here.
+	Memo memo.Files
+
+	// Compose is the active compose session, nil until /compose starts one
+	// (ADR-0002 #6). It lives for the process; persisting a phase machine across
+	// invocations is deliberately out of scope for change 0009.
+	Compose *compose.Session
+
+	// History accumulates this session's turns, so /dream has a transcript to
+	// extract from and /distill has runs to mine.
+	History []provider.Message
+	// Runs records each turn's tool sequence for /distill.
+	Runs []improve.Run
+
+	// extraCommands holds session-local command registrations. Builtins always
+	// win, so a registration cannot hijack /help.
+	extraCommands map[string]Command
 }
 
 // maxJudgeIterations returns the effective cap on judge consults.
@@ -222,6 +245,9 @@ func Assemble(root string, opts Options) (*Session, error) {
 		Tokenizer: contextmgr.ForModel(s.Model),
 		Budget:    budget,
 	}
+
+	// File memory (ADR-0002 #1): MEMORY.md and friends live at the project root.
+	s.Memo = memo.Files{Root: root}
 
 	// Checkpointing (ADR-0008). A window is required: without one there is no
 	// high-water mark to cross, so the feature stays off rather than guessing.

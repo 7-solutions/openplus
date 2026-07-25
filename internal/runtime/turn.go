@@ -7,6 +7,7 @@ import (
 
 	"github.com/7solutions/openplus/internal/agent"
 	"github.com/7solutions/openplus/internal/contextmgr"
+	"github.com/7solutions/openplus/internal/improve"
 	"github.com/7solutions/openplus/internal/provider"
 )
 
@@ -161,8 +162,31 @@ func (s *Session) Run(ctx context.Context, userMsg string, history []provider.Me
 	}
 
 	s.persist(ctx, userMsg, final)
+	s.record(final)
 	s.maybeCheckpoint(turn.Used, final)
 	return final, nil
+}
+
+// record keeps the session's own transcript and tool-sequence log up to date.
+// Without this, /dream has no transcript to extract from and /distill has no runs
+// to mine — the commands would dispatch and find nothing.
+func (s *Session) record(final []provider.Message) {
+	s.History = final
+
+	// A turn's tool calls, in call order, are one "run" for pattern mining. A
+	// tool-free turn records nothing: an empty sequence would dilute the
+	// frequency counts /distill depends on.
+	var tools []string
+	for _, m := range final {
+		for _, b := range m.Blocks {
+			if b.Kind == provider.BlockToolCall && b.ToolName != "" {
+				tools = append(tools, b.ToolName)
+			}
+		}
+	}
+	if len(tools) > 0 {
+		s.Runs = append(s.Runs, improve.Run{Tools: tools})
+	}
 }
 
 // maybeCheckpoint writes a checkpoint when the assembled context crossed the

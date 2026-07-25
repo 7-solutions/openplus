@@ -26,6 +26,15 @@ type Runner interface {
 	Run(ctx context.Context, input string, history []provider.Message) ([]provider.Message, error)
 }
 
+// Dispatcher routes slash commands locally, without a model round-trip. A Runner
+// that also implements it gets command handling; one that does not behaves
+// exactly as before, so the seam is additive.
+//
+// handled is false for input the front-end should run as a normal turn.
+type Dispatcher interface {
+	Dispatch(ctx context.Context, input string) (output string, handled bool, err error)
+}
+
 var errBoom = errors.New("boom")
 
 // StreamMsg wraps one streamed provider.Event (sent via program.Send).
@@ -137,6 +146,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "enter":
 			if !m.busy && strings.TrimSpace(m.input.Value()) != "" {
 				m.submit()
+				// A slash command is handled locally; only fall through to a
+				// turn when the dispatcher declines it.
+				if m.dispatch() {
+					return m, nil
+				}
 				return m, m.runTurn()
 			}
 		}
@@ -186,6 +200,35 @@ func (m *Model) submit() {
 	m.input.Reset()
 	m.log = append(m.log, "❯ "+m.pendingInput)
 	m.busy = true
+}
+
+// dispatch tries the submitted input as a slash command, reporting whether it
+// was handled. A handled command renders its output (or its error) into the
+// transcript and clears the busy flag, since no turn will follow.
+//
+// Errors are logged rather than returned: a command that fails must be visible,
+// but it should not tear down the session the way a provider failure would.
+func (m *Model) dispatch() bool {
+	d, ok := m.runner.(Dispatcher)
+	if !ok {
+		return false
+	}
+	out, handled, err := d.Dispatch(context.Background(), m.pendingInput)
+	if !handled {
+		return false
+	}
+
+	m.busy = false
+	switch {
+	case err != nil:
+		m.err = err
+		m.log = append(m.log, "error: "+err.Error())
+	default:
+		if trimmed := strings.TrimRight(out, "\n"); trimmed != "" {
+			m.log = append(m.log, trimmed)
+		}
+	}
+	return true
 }
 
 // applyEvent renders one streamed Event into the model (tested seam).

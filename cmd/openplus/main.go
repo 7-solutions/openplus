@@ -139,6 +139,16 @@ func runOnce(session *runtime.Session, prompt string) error {
 		fmt.Fprintf(os.Stderr, "\n· %s\n", call.Name)
 	}
 
+	// A slash command runs locally, with no model round-trip (change 0009).
+	out, handled, err := session.Dispatch(context.Background(), prompt)
+	if err != nil {
+		return err
+	}
+	if handled {
+		fmt.Println(strings.TrimRight(out, "\n"))
+		return nil
+	}
+
 	if _, err := session.Run(context.Background(), prompt, nil); err != nil {
 		return err
 	}
