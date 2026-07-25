@@ -1,155 +1,132 @@
-// Command openplus is the entrypoint. With a TTY it runs the Bubble Tea UI;
-// without one (pipes/CI) it falls back to a non-interactive smoke that proves
-// the loop. Real provider/config wiring (T-002/T-003 selection) lands in later
-// tasks; for now it uses the Fake provider so it runs with no API key.
+// Command openplus is the entrypoint. It assembles a live session from the
+// project's configuration (change 0002) and drives it: the Bubble Tea UI when
+// stdin is a TTY, a single non-interactive turn otherwise.
 package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"golang.org/x/term"
 
-	"github.com/7solutions/openplus/internal/agent"
-	"github.com/7solutions/openplus/internal/policy"
 	"github.com/7solutions/openplus/internal/provider"
-	"github.com/7solutions/openplus/internal/tool"
+	"github.com/7solutions/openplus/internal/runtime"
 	"github.com/7solutions/openplus/internal/tui"
 )
 
+const baseSystemPrompt = "You are OpenPlus, a pure-Go coding agent."
+
 func main() {
+	if err := run(); err != nil {
+		fmt.Fprintln(os.Stderr, "error:", err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
 	var (
-		skipPerms bool
+		root      string
 		model     string
+		skipPerms bool
+		fake      bool
+		prompt    string
 	)
+	flag.StringVar(&root, "C", ".", "project root")
+	flag.StringVar(&model, "model", "", "model id as <provider>/<model> (overrides opencode.json)")
 	flag.BoolVar(&skipPerms, "dangerously-skip-permissions", false,
 		"allow all tool calls without prompting (explicit deny rules still apply)")
-	flag.StringVar(&model, "model", "neutral/fake", "model id as <provider>/<model>")
+	flag.BoolVar(&fake, "fake", false, "use the scripted fake provider (no API key needed)")
+	flag.StringVar(&prompt, "p", "", "run a single turn with this prompt and exit")
 	flag.Parse()
 
-	gate, err := buildGate(skipPerms)
+	// A bare prompt can also be passed positionally: openplus "do the thing".
+	if prompt == "" && flag.NArg() > 0 {
+		prompt = strings.Join(flag.Args(), " ")
+	}
+
+	session, err := runtime.Assemble(root, runtime.Options{
+		Model:            model,
+		SkipPermissions:  skipPerms,
+		Fake:             fake,
+		BaseSystemPrompt: baseSystemPrompt,
+	})
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "error:", err)
-		os.Exit(1)
+		return explain(err)
 	}
-	_ = model // provider selection wiring lands in later tasks
+	defer session.Close() //nolint:errcheck // best-effort teardown
 
-	registry := tool.NewRegistry(
-		tool.Echo{},
-		tool.Read{}, tool.Write{}, tool.Edit{}, tool.Bash{},
-		tool.Glob{Root: "."}, tool.Grep{Root: "."},
-	)
-
-	if !term.IsTerminal(int(os.Stdin.Fd())) {
-		runSmoke(gate, registry)
-		return
-	}
-
-	// Interactive: launch the TUI.
-	agentInst := &agent.Agent{
-		Provider: demoProvider(),
-		Tools:    registry,
-		Gate:     gate,
-	}
-	m := tui.New(agentInst, "You are OpenPlus.", schemas(registry))
-	answer := make(chan bool, 1)
-	m = m.WithAnswer(answer)
-	p := tea.NewProgram(m, tea.WithAltScreen())
-
-	// Bridge agent callbacks into the program, and wire the permission prompter.
-	agentInst.OnEvent = func(ev provider.Event) { p.Send(tui.StreamMsg(ev)) }
-	agentInst.OnToolResult = func(call provider.ToolCall, res provider.Block) {
-		p.Send(tui.ToolResultMsg{Call: call, Result: res})
-	}
-	if prompting, ok := gate.(*policy.Prompting); ok {
-		prompting.Prompter = tui.NewPrompter(p.Send, answer)
-	}
-
-	if _, err := p.Run(); err != nil {
-		fmt.Fprintln(os.Stderr, "error:", err)
-		os.Exit(1)
-	}
-}
-
-// buildGate selects the permission gate from flags. The default asks before
-// mutating tools (bash/write/edit); --dangerously-skip-permissions drops to an
-// allow-all base. The returned Prompting gate's Prompter is wired by the caller
-// for the TUI.
-func buildGate(skipPerms bool) (policy.Gate, error) {
 	if skipPerms {
-		skip, err := policy.NewSkip(nil, nil)
-		if err != nil {
-			return nil, err
-		}
 		fmt.Fprintln(os.Stderr, "warning: --dangerously-skip-permissions active (allow-all base)")
-		return skip, nil
 	}
-	rules, err := policy.NewRules(policy.Allow,
-		map[string]string{"bash": "ask", "write": "ask", "edit": "ask"}, nil)
-	if err != nil {
-		return nil, err
+
+	// A one-shot prompt, or no TTY, means non-interactive.
+	if prompt != "" || !term.IsTerminal(int(os.Stdin.Fd())) {
+		return runOnce(session, prompt)
 	}
-	return &policy.Prompting{Rules: rules}, nil
+	return runTUI(session)
 }
 
-// schemas converts the tool registry into provider-neutral tool schemas.
-func schemas(r *tool.Registry) []provider.ToolSchema {
-	all := r.All()
-	out := make([]provider.ToolSchema, 0, len(all))
-	for _, t := range all {
-		out = append(out, provider.ToolSchema{
-			Name:        t.Name(),
-			Description: t.Description(),
-			InputSchema: t.Schema(),
-		})
+// runOnce drives a single turn and prints the assistant's reply.
+func runOnce(session *runtime.Session, prompt string) error {
+	if prompt == "" {
+		prompt = "Say hello and describe what you can do."
 	}
-	return out
-}
 
-// demoProvider returns a Fake that demonstrates streaming + a tool call on the
-// first turn, so the TUI is exercisable with no API key. Real wiring later.
-func demoProvider() *provider.Fake {
-	return &provider.Fake{
-		Scripts: [][]provider.Event{
-			{
-				{Kind: provider.EventTextDelta, Text: "sure — "},
-				{Kind: provider.EventToolCallStart, Call: &provider.ToolCall{
-					ID: "call_1", Name: "echo", Input: []byte(`{"text":"openplus is alive"}`),
-				}},
-				{Kind: provider.EventTurnEnd},
-			},
-			{
-				{Kind: provider.EventTextDelta, Text: "done"},
-				{Kind: provider.EventTurnEnd},
-			},
-			{{Kind: provider.EventTurnEnd}},
-		},
+	session.OnEvent = func(ev provider.Event) {
+		if ev.Kind == provider.EventTextDelta {
+			fmt.Print(ev.Text)
+		}
 	}
-}
+	session.OnToolResult = func(call provider.ToolCall, res provider.Block) {
+		if res.ToolResultError {
+			fmt.Fprintf(os.Stderr, "\n✗ %s: %s\n", call.Name, res.ToolResultText)
+			return
+		}
+		fmt.Fprintf(os.Stderr, "\n· %s\n", call.Name)
+	}
 
-// runSmoke is the non-interactive smoke: runs the loop once and prints history.
-func runSmoke(gate policy.Gate, registry *tool.Registry) {
-	a := &agent.Agent{
-		Provider: demoProvider(),
-		Tools:    tool.NewRegistry(tool.Echo{}),
-		Gate:     gate,
-		OnEvent: func(ev provider.Event) {
-			if ev.Kind == provider.EventTextDelta {
-				fmt.Print(ev.Text)
-			}
-		},
-	}
-	history, err := a.Run(context.Background(), "scaffold smoke test", nil, nil)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "error:", err)
-		os.Exit(1)
+	if _, err := session.Run(context.Background(), prompt, nil); err != nil {
+		return err
 	}
 	fmt.Println()
-	fmt.Printf("turns: %d\n", len(history))
-	for i, m := range history {
-		fmt.Printf("  [%d] %s: %+v\n", i, m.Role, m.Blocks)
+	return nil
+}
+
+// runTUI launches the interactive front-end, bridging session callbacks into the
+// program and wiring the permission prompter.
+func runTUI(session *runtime.Session) error {
+	answer := make(chan bool, 1)
+	m := tui.New(session, session.SystemPrompt).WithAnswer(answer)
+	p := tea.NewProgram(m, tea.WithAltScreen())
+
+	session.OnEvent = func(ev provider.Event) { p.Send(tui.StreamMsg(ev)) }
+	session.OnToolResult = func(call provider.ToolCall, res provider.Block) {
+		p.Send(tui.ToolResultMsg{Call: call, Result: res})
+	}
+	session.SetPrompter(tui.NewPrompter(p.Send, answer))
+
+	_, err := p.Run()
+	return err
+}
+
+// explain turns an assembly failure into actionable guidance. A missing
+// credential is the most common first-run problem, so it gets a concrete
+// next step rather than just the error text.
+func explain(err error) error {
+	switch {
+	case errors.Is(err, runtime.ErrMissingCredential):
+		return fmt.Errorf("%w\n\nSet the provider's apiKey in opencode.json (it may reference "+
+			"an environment variable, e.g. \"{env:ANTHROPIC_API_KEY}\"), point it at a local "+
+			"endpoint with options.baseURL, or run with --fake to try OpenPlus offline", err)
+	case errors.Is(err, runtime.ErrNoModel):
+		return fmt.Errorf("%w\n\nSet \"model\": \"<provider>/<model>\" in opencode.json, "+
+			"pass --model, or run with --fake", err)
+	default:
+		return err
 	}
 }

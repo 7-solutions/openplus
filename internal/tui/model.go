@@ -16,9 +16,15 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/7solutions/openplus/internal/agent"
 	"github.com/7solutions/openplus/internal/provider"
 )
+
+// Runner drives one turn to completion. The runtime's Session implements it; the
+// TUI depends on this seam rather than on the agent loop, so context assembly
+// (memory, skills, budgeting) stays outside the front-end.
+type Runner interface {
+	Run(ctx context.Context, input string, history []provider.Message) ([]provider.Message, error)
+}
 
 var errBoom = errors.New("boom")
 
@@ -39,34 +45,37 @@ type promptMsg struct {
 
 // Model is the Bubble Tea model.
 type Model struct {
-	agent   *agent.Agent
+	runner  Runner
 	system  string
-	tools   []provider.ToolSchema
 	history []provider.Message
 
-	input   textarea.Model
-	log     []string        // flushed, rendered lines
-	cur     strings.Builder // assistant text accumulated since last flush
-	busy    bool            // a turn is running
-	err     error
-	w, h    int
-	pending *provider.ToolCall // non-nil while a permission prompt is shown
-	answer  chan bool          // replies to the Prompter
+	input textarea.Model
+	log   []string        // flushed, rendered lines
+	cur   strings.Builder // assistant text accumulated since last flush
+	busy  bool            // a turn is running
+	err   error
+	w, h  int
+
+	// pendingInput holds the submitted text until runTurn reads it.
+	pendingInput string
+	// pending is non-nil while a permission prompt is shown.
+	pending *provider.ToolCall
+	// answer carries prompt replies back to the Prompter.
+	answer chan bool
 }
 
-// New builds a Model wired to an agent. The caller sets agent.OnEvent /
-// OnToolResult to push StreamMsg/ToolResultMsg via program.Send, and calls
-// WithAnswer to wire the permission-prompt reply channel.
-func New(a *agent.Agent, system string, tools []provider.ToolSchema) Model {
+// New builds a Model driven by a Runner. The caller pushes StreamMsg and
+// ToolResultMsg via program.Send, and calls WithAnswer to wire the
+// permission-prompt reply channel.
+func New(r Runner, system string) Model {
 	ta := textarea.New()
 	ta.Placeholder = "send a message… (enter to submit, ctrl+c to quit)"
 	ta.Prompt = "❯ "
 	ta.ShowLineNumbers = false
 	ta.Focus()
 	return Model{
-		agent:  a,
+		runner: r,
 		system: system,
-		tools:  tools,
 		input:  ta,
 	}
 }
@@ -157,28 +166,25 @@ type turnDoneMsg struct {
 	err     error
 }
 
-// runTurn drives one agent.Run in a goroutine; streamed Events and tool
+// runTurn drives one Runner.Run in a goroutine; streamed Events and tool
 // results arrive via the program.Send bridge set up by the caller.
 func (m Model) runTurn() tea.Cmd {
-	agent := m.agent
-	system := m.system
-	tools := m.tools
+	runner := m.runner
+	input := m.pendingInput
 	history := m.history
 	return func() tea.Msg {
-		hist, err := agent.Run(context.Background(), system, tools, history)
+		hist, err := runner.Run(context.Background(), input, history)
 		return turnDoneMsg{history: hist, err: err}
 	}
 }
 
-// submit captures the current input as a user message, marks the model busy,
-// and clears the input. The caller returns runTurn() as the resulting Cmd.
+// submit captures the current input, marks the model busy, and clears the box.
+// The runner owns turning the input into a message, so the model only holds it
+// until runTurn reads it. The caller returns runTurn() as the resulting Cmd.
 func (m *Model) submit() {
-	text := m.input.Value()
+	m.pendingInput = m.input.Value()
 	m.input.Reset()
-	m.history = append(m.history, provider.Message{
-		Role:   provider.RoleUser,
-		Blocks: []provider.Block{{Kind: provider.BlockText, Text: text}},
-	})
+	m.log = append(m.log, "❯ "+m.pendingInput)
 	m.busy = true
 }
 
