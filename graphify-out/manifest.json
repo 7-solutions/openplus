@@ -1,0 +1,27 @@
+{
+  "leak_guard_test.go": {
+    "mtime": 1784997469.4475515,
+    "ast_hash": "c37f8ab3974647b1a3e60c7166bd5348",
+    "semantic_hash": "c37f8ab3974647b1a3e60c7166bd5348"
+  },
+  "model.go": {
+    "mtime": 1784996262.570487,
+    "ast_hash": "7ba383a01f25558bc8af0b85b202cb4c",
+    "semantic_hash": "7ba383a01f25558bc8af0b85b202cb4c"
+  },
+  "ports.go": {
+    "mtime": 1784996658.468461,
+    "ast_hash": "60ff2c25f47faebf8a56752825a28231",
+    "semantic_hash": "60ff2c25f47faebf8a56752825a28231"
+  },
+  "ports_test.go": {
+    "mtime": 1785007589.9766047,
+    "ast_hash": "dd622c4fdc74ab82255686127fc6b950",
+    "semantic_hash": "dd622c4fdc74ab82255686127fc6b950"
+  },
+  "providerfake/fake.go": {
+    "mtime": 1784996295.4667342,
+    "ast_hash": "79886fadebfc7baf19510bca632e8430",
+    "semantic_hash": "79886fadebfc7baf19510bca632e8430"
+  }
+}

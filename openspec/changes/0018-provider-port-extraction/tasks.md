@@ -78,7 +78,7 @@
 - [x] T-1809 Update the package doc comment on `internal/provider/types.go`
       (now empty) to point to `internal/ports/`. After T-1807 types.go is
       deleted; until then the doc-comment makes the move discoverable.
-- [ ] T-1810 Knowledge graph: `graphify` re-runs on
+- [x] T-1810 Knowledge graph: `graphify` re-runs on
       `internal/ports/provider.go` and `internal/ports/model.go` to keep
       `ports.Provider` discoverable from core packages.
 - [x] T-1811 Memory: `icm store -t decisions-openplus -c "0018: provider
@@ -93,6 +93,6 @@
       (concrete adapters still live in `internal/provider/`); no provider
       type leaked to core (T-1808 guards it).
 - [x] cgo-free build still green (`CGO_ENABLED=0 go build ./...`).
-- [ ] Advisor passed; graph updated (T-1810 — **not yet run**); memory
+- [x] Advisor passed; graph updated (T-1810 ✓); memory
       updated (T-1811 ✓).
 - [x] No deferred/backlog item introduced.
