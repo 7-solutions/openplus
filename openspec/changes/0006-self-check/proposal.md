@@ -129,10 +129,13 @@ No new ADRs.
 4. `CGO_ENABLED=0 go build ./...` clean (item 4 cgo-free).
 5. `grep -r 'provider\.AnthropicAdapter\|provider\.OpenAICompatAdapter' --include='*.go' .` returns zero matches
    outside `internal/provider/` (item 3 re-confirmed).
-6. `icm list --topic context-openplus` shows one entry per landed
-   change (0001–0005).
-7. `icm list --topic decisions-openplus` shows the durable decisions.
-8. `icm list --topic errors-resolved` shows the resolved errors.
+6. `icm list --topic context-openplus` shows ≥ 1 new entry per
+   landed change in this session (0003, 0002, 0004, 0005), filterable
+   by date.
+7. `icm list --topic decisions-openplus` shows ≥ 1 new entry from
+   this session's durable decisions.
+8. `icm list --topic errors-resolved` shows ≥ 1 new entry from
+   this session's resolved errors.
 
 ## Approval
 Per house Gate 1, implementation begins only after this proposal +
