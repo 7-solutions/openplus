@@ -15,4 +15,7 @@ the stack, the build gate, the ports, the ADR index, the hard rules, and the def
 - Follow the build gate in `AGENTS.md` exactly. Gate 1 (OpenSpec PLAN+SPEC+TASKS with a
   STOP for approval) is mandatory — do not write code before an approved spec.
 - The build procedure is packaged as a skill: `.claude/skills/openplus-build/SKILL.md`.
+- A SWE-Bench-style evaluation workflow (single problem, hidden test suite,
+  scored patch) is packaged as a separate skill: `.claude/skills/swe-loop/SKILL.md`.
+  Use it when the task is benchmark-style, not shipped-feature work.
 - ADRs: `docs/adr/`. Specs: `openspec/specs/`. Most recent change: `openspec/changes/0018-provider-port-extraction/`.
