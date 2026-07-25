@@ -144,6 +144,19 @@ type Session struct {
 	// KeepRecent bounds how many trailing messages survive compaction
 	// (change 0010). Zero uses DefaultKeepRecent.
 	KeepRecent int
+
+	// MaxSubagents caps how many subagents one fan-out may launch, and
+	// MaxSubagentParallel how many run at once (change 0011). Each subagent is a
+	// full model turn, so these are cost controls. Zero uses the defaults.
+	MaxSubagents        int
+	MaxSubagentParallel int
+	// OnSubagentDir reports the isolated directory a subagent is running in
+	// (empty when running in place). Nil is a no-op.
+	OnSubagentDir func(dir string)
+
+	// Workflows holds the registered deterministic workflows (ADR-0006),
+	// keyed by name and invoked with /workflow.
+	Workflows map[string]orchestrate.Workflow
 	// OnCompact reports a compaction as (before, after) message counts, so a
 	// front-end can tell the user rather than the context shrinking invisibly.
 	// Nil is a no-op.
@@ -256,6 +269,9 @@ func Assemble(root string, opts Options) (*Session, error) {
 
 	// File memory (ADR-0002 #1): MEMORY.md and friends live at the project root.
 	s.Memo = memo.Files{Root: root}
+
+	// Built-in workflows (ADR-0006).
+	s.registerWorkflows()
 
 	// Checkpointing (ADR-0008). A window is required: without one there is no
 	// high-water mark to cross, so the feature stays off rather than guessing.

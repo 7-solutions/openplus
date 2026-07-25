@@ -89,6 +89,21 @@ var builtinCommands = map[string]Command{
 		Name: "distill", Usage: "/distill [name]", Summary: "mine repeated tool sequences into a scaffold",
 		Run: (*Session).cmdDistill,
 	},
+
+	// --- orchestration (ADR-0002 #4, #7) ---
+	"subagents": {
+		Name: "subagents", Usage: "/subagents <prompt> | <prompt> …",
+		Summary: "run prompts as parallel subagents in isolated worktrees",
+		Run:     (*Session).cmdSubagents,
+	},
+	"workflow": {
+		Name: "workflow", Usage: "/workflow <name>", Summary: "run a registered workflow",
+		Run: (*Session).cmdWorkflow,
+	},
+	"workflows": {
+		Name: "workflows", Usage: "/workflows", Summary: "list registered workflows",
+		Run: (*Session).cmdWorkflows,
+	},
 }
 
 func init() {
@@ -372,6 +387,30 @@ func (s *Session) cmdDream(_ string) (string, error) {
 		}
 	}
 	return fmt.Sprintf("appended %d fact(s) to MEMORY.md", len(facts)), nil
+}
+
+// --- orchestration ---
+
+// cmdSubagents fans prompts out as parallel subagents. Prompts are separated by
+// "|" so an individual prompt can contain spaces; blank segments are dropped so a
+// trailing or doubled separator is forgiving rather than an error.
+func (s *Session) cmdSubagents(args string) (string, error) {
+	var prompts []string
+	for _, seg := range strings.Split(args, "|") {
+		if p := strings.TrimSpace(seg); p != "" {
+			prompts = append(prompts, p)
+		}
+	}
+	if len(prompts) == 0 {
+		return "", fmt.Errorf("runtime: /subagents needs at least one prompt, " +
+			"separated by | (e.g. /subagents write the docs | review the docs)")
+	}
+
+	results, err := s.Fanout(context.Background(), prompts)
+	if err != nil {
+		return "", err
+	}
+	return FanoutReport(prompts, results), nil
 }
 
 // cmdDistill mines the session's recorded tool sequences and scaffolds the
