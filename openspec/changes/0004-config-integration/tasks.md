@@ -69,29 +69,37 @@
       Done — 5326ad9.
 
 ## C — `cmd/openplus` wiring deltas
-- [ ] T-420 RED `TestMainVersion`: `run()` with `--version` flag returns
+- [x] T-420 RED `TestMainVersion`: `run()` with `--version` flag returns
       `nil` and prints to stdout something matching `^openplus \S+$`; no
       assembly happens.
-- [ ] T-421 Add `var Version = "dev"` in `cmd/openplus/main.go` and the
+      Done — 1d8831e.
+- [x] T-421 Add `var Version = "dev"` in `cmd/openplus/main.go` and the
       `--version` flag. Wire `-ldflags '-X main.Version=v0.1.0'` in a docs
       note (not in the binary itself).
-- [ ] T-422 RED `TestMainConfigFlag`: `run()` with `--config /tmp/x.json`
+      Done — 1d8831e.
+- [x] T-422 RED `TestMainConfigFlag`: `run()` with `--config /tmp/x.json`
       reads that file; a sentinel value inside it (e.g. a unique model
       name) must reach the runtime. Cover both the success path and the
       "file not found" path that returns exit 1 with a clear message.
-- [ ] T-423 Add `--config / -c` flag (default `<root>/opencode.json`).
-- [ ] T-424 RED `TestMainEnvOverrides`:
+      Done — 4caedbf.
+- [x] T-423 Add `--config / -c` flag (default `<root>/opencode.json`).
+      Done — 4caedbf (no short form: -C is the project root).
+- [x] T-424 RED `TestMainEnvOverrides`:
       `OPENPLUS_MODEL=foo/bar OPENPLUS_FAKE=1` overrides the file and the
       `--fake` flag.
-- [ ] T-425 Apply the two env vars in `run()` before `runtime.Assemble`.
+      Done — b641e0a.
+- [x] T-425 Apply the two env vars in `run()` before `runtime.Assemble`.
       Document precedence: env > `--model`/`--fake` > `opencode.json`.
-- [ ] T-426 RED `TestMainExitCodeContract`: missing credential returns
+      Done — b641e0a.
+- [x] T-426 RED `TestMainExitCodeContract`: missing credential returns
       exit 2; no model returns exit 2; provider error returns exit 1;
       successful `--fake` run returns exit 0. Use a temp subprocess via
       `os/exec` if needed; if the function isn't testable directly, lift
       the exit-code mapping into a small `func exitCode(err error) int`.
-- [ ] T-427 Introduce `exitCode(err error) int` mapping `ErrMissingCredential`
+      Done — 3330c35.
+- [x] T-427 Introduce `exitCode(err error) int` mapping `ErrMissingCredential`
       and `ErrNoModel` to 2, everything else to 1. Wire it through `main()`.
+      Done — 3330c35.
 
 ## D — Integration tests
 - [ ] T-430 RED `TestIntegrationMemoryRoundTripAcrossSessions`: write via
