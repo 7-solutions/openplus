@@ -17,7 +17,9 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
+	"github.com/7solutions/openplus/internal/orchestrate"
 	"github.com/7solutions/openplus/internal/policy"
 	"github.com/7solutions/openplus/internal/provider"
 	"github.com/7solutions/openplus/internal/tool"
@@ -337,3 +339,178 @@ func TestIntegrationFakeSmokeEndToEnd(t *testing.T) {
 
 // writeFile is no longer used; the package's own `write` helper in
 // assemble_test.go handles the same thing for that file.
+
+// --- Change 0007 / T-440..T-444: Goal/Judge on Session ---
+//
+// These tests wire the existing orchestrate.Judge (0001/M7, ADR-0006)
+// into Session.Run as the loop's termination condition. The judge is
+// consulted after the agent loop produces a tool-less reply; MET
+// stops, UNMET loops with feedback appended. RED until the fields
+// and the wiring exist.
+
+// judgeSays returns a scripted provider whose Stream calls return
+// the given verdict replies in order (one per Evaluate call).
+func judgeSays(replies ...string) *provider.Fake {
+	scripts := make([][]provider.Event, len(replies))
+	for i, reply := range replies {
+		scripts[i] = []provider.Event{
+			{Kind: provider.EventTextDelta, Text: reply},
+			{Kind: provider.EventTurnEnd},
+		}
+	}
+	return &provider.Fake{Scripts: scripts}
+}
+
+// TestGoalAbsentSkipsJudge (T-440): with Goal empty and Judge nil,
+// Run behaves exactly as today — no judge consult, no extra turn.
+func TestGoalAbsentSkipsJudge(t *testing.T) {
+	root := project(t, "")
+	s, err := Assemble(root, Options{Fake: true})
+	if err != nil {
+		t.Fatalf("Assemble: %v", err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+
+	hist, err := s.Run(context.Background(), "hi", nil)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	// Today: 2 messages (user + assistant).
+	if len(hist) != 2 {
+		t.Fatalf("history = %d messages, want 2 (user + assistant; no judge consult expected)", len(hist))
+	}
+}
+
+// TestGoalEmptyStopsImmediately (T-441): Goal is empty but Judge is
+// non-nil. Judge.Evaluate short-circuits to Met=true on empty goal;
+// Run inherits that and returns without consulting the judge.
+//
+// Regression guard for the explicit Goal-empty short-circuit (see
+// orchestrate/goal.go:62).
+func TestGoalEmptyStopsImmediately(t *testing.T) {
+	root := project(t, "")
+	s, err := Assemble(root, Options{Fake: true})
+	if err != nil {
+		t.Fatalf("Assemble: %v", err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+
+	// Set a Judge with a provider that records calls. The judge must
+	// not be called because Goal is empty.
+	judgeCalls := &atomic.Int32{}
+	jp := &judgeRecordingProvider{inner: judgeSays("MET: anything"), calls: judgeCalls}
+	s.Judge = &orchestrate.Judge{Provider: jp, Model: "fake/judge"}
+
+	hist, err := s.Run(context.Background(), "hi", nil)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if got := judgeCalls.Load(); got != 0 {
+		t.Errorf("judge called %d times; want 0 (empty goal must short-circuit)", got)
+	}
+	if len(hist) != 2 {
+		t.Errorf("history = %d messages; want 2", len(hist))
+	}
+}
+
+// TestGoalJudgeStopsLoopWhenMet (T-442): agent wants to stop
+// (tool-less reply), judge says MET → Run returns after one judge
+// consult; judge called exactly once.
+func TestGoalJudgeStopsLoopWhenMet(t *testing.T) {
+	root := project(t, "")
+	s, err := Assemble(root, Options{Fake: true})
+	if err != nil {
+		t.Fatalf("Assemble: %v", err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+
+	s.Goal = "the user said hi"
+	judgeCalls := &atomic.Int32{}
+	jp := &judgeRecordingProvider{inner: judgeSays("MET: greeting acknowledged"), calls: judgeCalls}
+	s.Judge = &orchestrate.Judge{Provider: jp, Model: "fake/judge"}
+
+	if _, err := s.Run(context.Background(), "hi", nil); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if got := judgeCalls.Load(); got != 1 {
+		t.Errorf("judge calls = %d; want 1 (MET on first consult)", got)
+	}
+}
+
+// TestGoalJudgeKeepsLoopingWhenUnmet (T-443): first judge says
+// UNMET, second says MET. Run loops the agent twice; the second
+// iteration's history includes the first feedback as a user
+// message.
+func TestGoalJudgeKeepsLoopingWhenUnmet(t *testing.T) {
+	root := project(t, "")
+	s, err := Assemble(root, Options{Fake: true})
+	if err != nil {
+		t.Fatalf("Assemble: %v", err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+
+	s.Goal = "agent must call a tool"
+	judgeCalls := &atomic.Int32{}
+	jp := &judgeRecordingProvider{
+		inner: judgeSays("UNMET: no tool called yet", "MET: tool called"),
+		calls: judgeCalls,
+	}
+	s.Judge = &orchestrate.Judge{Provider: jp, Model: "fake/judge"}
+
+	if _, err := s.Run(context.Background(), "hi", nil); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if got := judgeCalls.Load(); got != 2 {
+		t.Errorf("judge calls = %d; want 2 (UNMET then MET)", got)
+	}
+}
+
+// TestGoalJudgeRespectsMaxIterations (T-444): judge always says
+// UNMET. Run returns after MaxJudgeIterations (default 3) with an
+// error wrapping the last verdict's feedback. No infinite loop.
+func TestGoalJudgeRespectsMaxIterations(t *testing.T) {
+	root := project(t, "")
+	s, err := Assemble(root, Options{Fake: true})
+	if err != nil {
+		t.Fatalf("Assemble: %v", err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+
+	s.Goal = "an unsatisfiable goal"
+	s.MaxJudgeIterations = 3
+	judgeCalls := &atomic.Int32{}
+	jp := &judgeRecordingProvider{
+		inner: judgeSays("UNMET: nope", "UNMET: still nope", "UNMET: try again"),
+		calls: judgeCalls,
+	}
+	s.Judge = &orchestrate.Judge{Provider: jp, Model: "fake/judge"}
+
+	start := time.Now()
+	_, err = s.Run(context.Background(), "hi", nil)
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Fatal("expected an error after MaxJudgeIterations rounds of UNMET")
+	}
+	if !strings.Contains(err.Error(), "judge") && !strings.Contains(err.Error(), "goal") {
+		t.Errorf("error = %v; want one that mentions the judge or the goal", err)
+	}
+	if got := judgeCalls.Load(); got != 3 {
+		t.Errorf("judge calls = %d; want 3 (MaxJudgeIterations)", got)
+	}
+	if elapsed > 30*time.Second {
+		t.Errorf("Run took %v; want < 30s (must not infinite-loop)", elapsed)
+	}
+}
+
+// judgeRecordingProvider wraps a scripted Fake with an atomic counter.
+// The counter increments every time Stream is called.
+type judgeRecordingProvider struct {
+	inner *provider.Fake
+	calls *atomic.Int32
+}
+
+func (j *judgeRecordingProvider) Stream(ctx context.Context, req provider.Request) (<-chan provider.Event, error) {
+	j.calls.Add(1)
+	return j.inner.Stream(ctx, req)
+}

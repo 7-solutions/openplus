@@ -17,6 +17,7 @@ import (
 	"github.com/7solutions/openplus/internal/contextmgr"
 	"github.com/7solutions/openplus/internal/embed"
 	"github.com/7solutions/openplus/internal/memory"
+	"github.com/7solutions/openplus/internal/orchestrate"
 	"github.com/7solutions/openplus/internal/policy"
 	"github.com/7solutions/openplus/internal/provider"
 	selectadapter "github.com/7solutions/openplus/internal/provider/select"
@@ -62,7 +63,22 @@ type Options struct {
 	// ConfigPath overrides the default <root>/opencode.json. Empty means
 	// use the default. Used by --config / -c in the CLI.
 	ConfigPath string
+	// Goal, when non-empty, makes Run consult Session.Judge after the
+	// agent loop returns. Empty Goal skips the judge entirely. Used by
+	// --goal in the CLI (T-440..T-445).
+	Goal string
+	// Judge is the optional goal / stop-condition evaluator (ADR-0006).
+	// Nil disables judging even when Goal is set, preserving pre-0007
+	// behavior for callers that want a goal field but no judge yet.
+	Judge *orchestrate.Judge
+	// MaxJudgeIterations caps the number of judge consults in a single
+	// Run when the judge keeps replying UNMET. Zero or negative falls
+	// back to DefaultMaxJudgeIterations (3).
+	MaxJudgeIterations int
 }
+
+// DefaultMaxJudgeIterations is the default cap for judge consults.
+const DefaultMaxJudgeIterations = 3
 
 // Session is an assembled, ready-to-run agent session. Fields are ports, not
 // concrete adapters, except where a caller legitimately needs the concrete type
@@ -77,6 +93,19 @@ type Session struct {
 	Provider    provider.Provider
 	Tools       *tool.Registry
 	ToolSchemas []provider.ToolSchema
+
+	// Goal is the stop-condition text (Change 0007). Empty disables
+	// judging; Run then terminates when the agent's tool-call count hits
+	// zero (the pre-0007 behavior).
+	Goal string
+	// Judge is the optional goal / stop-condition evaluator (ADR-0006).
+	// When Goal is non-empty and Judge is non-nil, Run consults Judge
+	// after the agent loop returns. MET stops; UNMET appends feedback
+	// to history and loops; the loop is bounded by MaxJudgeIterations.
+	Judge *orchestrate.Judge
+	// MaxJudgeIterations caps the judge loop. Zero or negative falls
+	// back to DefaultMaxJudgeIterations (3).
+	MaxJudgeIterations int
 
 	// Gate authorizes tool calls. Until a Prompter is wired, an Ask rule
 	// degrades to Deny — safe, but not interactive.
@@ -96,6 +125,14 @@ type Session struct {
 	// agent loop on every Run. Nil means no rendering (the non-interactive path).
 	OnEvent      func(provider.Event)
 	OnToolResult func(call provider.ToolCall, result provider.Block)
+}
+
+// maxJudgeIterations returns the effective cap on judge consults.
+func (s *Session) maxJudgeIterations() int {
+	if s.MaxJudgeIterations > 0 {
+		return s.MaxJudgeIterations
+	}
+	return DefaultMaxJudgeIterations
 }
 
 // Assemble builds a Session from a project root. It fails rather than degrade:
@@ -126,9 +163,12 @@ func Assemble(root string, opts Options) (*Session, error) {
 	}
 
 	s := &Session{
-		Root:         root,
-		Config:       pc.Config,
-		SystemPrompt: pc.SystemPrompt(base),
+		Root:               root,
+		Config:             pc.Config,
+		SystemPrompt:       pc.SystemPrompt(base),
+		Goal:               opts.Goal,
+		Judge:              opts.Judge,
+		MaxJudgeIterations: opts.MaxJudgeIterations,
 	}
 
 	// Tools: the full builtin set, plus their neutral schemas for the model.

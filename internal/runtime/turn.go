@@ -62,6 +62,12 @@ func (s *Session) AssembleContext(ctx context.Context, userMsg string, history [
 // Run assembles context and drives one agent loop to completion, returning the
 // resulting history. When memory is configured the exchange is persisted so a
 // later session can retrieve it.
+//
+// When Session.Goal is non-empty AND Session.Judge is non-nil, Run consults
+// the judge after the agent loop returns (Change 0007 / T-440..T-445).
+// MET stops; UNMET appends the judge's feedback to history and re-runs the
+// agent loop. The loop is bounded by Session.MaxJudgeIterations (default
+// DefaultMaxJudgeIterations = 3) so an unsatisfiable goal can't run forever.
 func (s *Session) Run(ctx context.Context, userMsg string, history []provider.Message) ([]provider.Message, error) {
 	if strings.TrimSpace(userMsg) == "" {
 		return nil, fmt.Errorf("runtime: empty user message")
@@ -83,9 +89,46 @@ func (s *Session) Run(ctx context.Context, userMsg string, history []provider.Me
 		OnToolResult: s.OnToolResult,
 	}
 
-	final, err := a.Run(ctx, turn.System, s.ToolSchemas, turn.History)
-	if err != nil {
-		return final, err
+	maxIter := s.maxJudgeIterations()
+	currentHistory := turn.History
+
+	var final []provider.Message
+	for round := 0; round < maxIter; round++ {
+		hist, err := a.Run(ctx, turn.System, s.ToolSchemas, currentHistory)
+		if err != nil {
+			return hist, err
+		}
+		final = hist
+
+		// No goal or no judge → preserve the pre-0007 single-shot behavior.
+		// The agent's own tool-call count is what ends the loop.
+		if s.Goal == "" || s.Judge == nil {
+			break
+		}
+
+		verdict, err := s.Judge.Evaluate(ctx, s.Goal, hist)
+		if err != nil {
+			return hist, fmt.Errorf("runtime: judge: %w", err)
+		}
+		if verdict.Met {
+			break
+		}
+		// UNMET: append feedback as a user message and loop again,
+		// unless this was the last allowed round.
+		if round == maxIter-1 {
+			return final, fmt.Errorf("runtime: judge never returned MET after %d rounds; last feedback: %s",
+				maxIter, strings.TrimSpace(verdict.Feedback))
+		}
+		feedback := strings.TrimSpace(verdict.Feedback)
+		if feedback == "" {
+			feedback = "(judge said UNMET with no feedback)"
+		}
+		currentHistory = append(currentHistory, provider.Message{
+			Role: provider.RoleUser,
+			Blocks: []provider.Block{
+				{Kind: provider.BlockText, Text: "The goal is not met yet. Judge feedback:\n\n" + feedback},
+			},
+		})
 	}
 
 	s.persist(ctx, userMsg, final)
