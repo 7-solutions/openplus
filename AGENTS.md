@@ -41,7 +41,15 @@ Checkpointer · PolicyGate · Workflow · LanguageService. Layout is in
 
 ## Hard rules
 - **Pure Go / cgo-free.** No cgo in the default build (that is why ncruces+wazero, not
-  mattn+cgo). Single static binary; trivial cross-compile.
+  mattn+cgo). Trivial cross-compile; one binary per platform, no build toolchain
+  required at install time.
+  **Caveat, measured at v0.0.1-alpha:** the binary is *not* fully static. The Turso
+  driver reaches libturso through `ebitengine/purego`, which needs the dynamic
+  loader, so the binary links glibc (`libdl`, `libpthread`, `libc`) even with
+  `CGO_ENABLED=0`. It requires no versioned GLIBC symbols, so it is portable across
+  mainstream glibc distributions, but it **will not run on stock Alpine/musl**.
+  Full static linkage remains the goal; reaching it means replacing purego-based
+  `dlopen` in the driver path.
 - **Provider neutrality.** The loop and all subsystems use only the neutral model.
   No provider-specific type escapes `internal/provider`.
 - **Wire neutrality at every port — no wire type crosses a seam.** A port's
