@@ -55,7 +55,7 @@ func TestWriteIndexesShadow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Write: %v", err)
 	}
-	hits, err := s.fts.search(context.Background(), "rust", 5)
+	hits, err := s.fts.search(context.Background(), "rust", 5, DefaultRRF().K)
 	if err != nil {
 		t.Fatalf("shadow search: %v", err)
 	}
@@ -96,7 +96,7 @@ func TestPruneDeletesShadow(t *testing.T) {
 		t.Errorf("shadow count = %d, want 2 (prune must delete from shadow too)", shadowCount)
 	}
 	// The pruned terms must no longer match.
-	if hits, _ := s.fts.search(context.Background(), "alpha", 5); len(hits) != 0 {
+	if hits, _ := s.fts.search(context.Background(), "alpha", 5, DefaultRRF().K); len(hits) != 0 {
 		t.Errorf("pruned term 'alpha' still in shadow: %v", hits)
 	}
 }

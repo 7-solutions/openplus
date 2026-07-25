@@ -61,12 +61,42 @@ type Store struct {
 	// means vector-only — the backward-compatible default from 0020.
 	fts *ftsIndex
 
+	// rrf tunes Reciprocal Rank Fusion of the vector and lexical halves
+	// (change 0024). Open initializes it to DefaultRRF() so the store
+	// behaves identically to pre-0024; WithRRF overrides it. When fts is
+	// nil, LexicalWeight has no effect (there is no lexical half to weight).
+	rrf RRFConfig
+
 	// wantFTS is set by the WithFTS option; Open acts on it to open the
 	// shadow once the primary handle is ready.
 	wantFTS bool
 
 	migrated bool
 	dim      int
+}
+
+// RRFConfig tunes Reciprocal Rank Fusion of the two retrieval halves in
+// Search. The fused score for a chunk is:
+//
+//	VectorWeight/(K + vectorRank) + LexicalWeight·(1/(K + lexicalRank))
+//
+// where each rank is 0-indexed and a half that does not return the chunk
+// contributes 0 for that half. K is the rank-damping constant (the standard
+// RRF value is 60); lower K makes top ranks dominate more. DefaultRRF()
+// returns the proven-neutral {60, 1, 1} — equal weights, standard K — which
+// reproduces the change-0021 fusion exactly.
+type RRFConfig struct {
+	K             float64 // rank-damping constant; standard 60. Must be > 0 for a physical fusion.
+	VectorWeight  float64 // weight on the vector-KNN half. 0 = disable the vector contribution.
+	LexicalWeight float64 // weight on the lexical-bm25 half. 0 = disable the lexical contribution.
+}
+
+// DefaultRRF returns the neutral RRF config: K=60, both weights 1.0. This is
+// the change-0021 equal-weight behavior and the value Open applies when no
+// WithRRF option is passed. Tests that assert exact hybrid scores (e.g. the
+// +1/60 lexical boost) rely on these defaults.
+func DefaultRRF() RRFConfig {
+	return RRFConfig{K: 60.0, VectorWeight: 1.0, LexicalWeight: 1.0}
 }
 
 // OpenOption configures an Open call. The zero-value option set gives the
@@ -79,6 +109,16 @@ type OpenOption func(*Store)
 // reconstructable via RebuildFTS.
 func WithFTS() OpenOption {
 	return func(s *Store) { s.wantFTS = true }
+}
+
+// WithRRF overrides the store's Reciprocal Rank Fusion config (change 0024).
+// The config is applied as-is — there is no zero-value magic, so a caller
+// passing WithRRF(RRFConfig{}) gets {0,0,0} (their explicit choice to zero
+// out the fusion). The neutral default comes from DefaultRRF(), which Open
+// applies before options; most callers either omit WithRRF entirely or pass
+// DefaultRRF() with a field or two adjusted.
+func WithRRF(cfg RRFConfig) OpenOption {
+	return func(s *Store) { s.rrf = cfg }
 }
 
 // SetMaxEntries caps the stored chunks at n. Oldest chunks (lowest id) are
@@ -117,7 +157,7 @@ func Open(path string, opts ...OpenOption) (*Store, error) {
 			_ = err
 		}
 	}
-	s := &Store{db: db, path: path}
+	s := &Store{db: db, path: path, rrf: DefaultRRF()}
 	for _, opt := range opts {
 		if opt != nil {
 			opt(s)

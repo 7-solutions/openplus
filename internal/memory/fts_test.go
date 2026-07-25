@@ -44,7 +44,7 @@ func TestFTSIndexAndSearch(t *testing.T) {
 		t.Fatalf("index 2: %v", err)
 	}
 
-	hits, err := f.search(ctx, "rust", 5)
+	hits, err := f.search(ctx, "rust", 5, DefaultRRF().K)
 	if err != nil {
 		t.Fatalf("search: %v", err)
 	}
@@ -67,7 +67,7 @@ func TestFTSSearchMiss(t *testing.T) {
 	if err := f.index(ctx, 1, "hello world"); err != nil {
 		t.Fatal(err)
 	}
-	hits, err := f.search(ctx, "quantum", 5)
+	hits, err := f.search(ctx, "quantum", 5, DefaultRRF().K)
 	if err != nil {
 		t.Fatalf("search miss: %v", err)
 	}
@@ -89,7 +89,7 @@ func TestFTSDelete(t *testing.T) {
 	if err := f.delete(ctx, []int64{2}); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
-	hits, err := f.search(ctx, "gamma", 5)
+	hits, err := f.search(ctx, "gamma", 5, DefaultRRF().K)
 	if err != nil {
 		t.Fatalf("search after delete: %v", err)
 	}
@@ -97,7 +97,7 @@ func TestFTSDelete(t *testing.T) {
 		t.Errorf("deleted rowid 2 still returned by search: %v", hits)
 	}
 	// The other rows must survive.
-	hits, _ = f.search(ctx, "alpha", 5)
+	hits, _ = f.search(ctx, "alpha", 5, DefaultRRF().K)
 	if len(hits) != 1 {
 		t.Errorf("alpha search after deleting gamma = %d hits, want 1", len(hits))
 	}
@@ -112,7 +112,7 @@ func TestFTSSearchKLimit(t *testing.T) {
 			t.Fatalf("index %d: %v", i, err)
 		}
 	}
-	hits, err := f.search(ctx, "shared", 2)
+	hits, err := f.search(ctx, "shared", 2, DefaultRRF().K)
 	if err != nil {
 		t.Fatalf("search: %v", err)
 	}

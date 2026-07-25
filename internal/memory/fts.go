@@ -103,14 +103,17 @@ func (f *ftsIndex) delete(ctx context.Context, ids []int64) error {
 	return nil
 }
 
-// search runs an FTS5 MATCH query and returns id -> RRF rank contribution.
-// The score uses the same 1/(rrfK+rank) formula as the vector KNN half in
-// Search, so the Store fusion is plain map addition. The bm25() ordering
-// is applied server-side (most relevant first); only the RRF rank leaks
-// out, never bm25's raw (negative) magnitude.
+// search runs an FTS5 MATCH query and returns id -> raw RRF rank contribution
+// (1/(rrfK+rank)). The bm25() ordering is applied server-side (most relevant
+// first); only the RRF rank leaks out, never bm25's raw (negative) magnitude.
+// The Store applies the per-half LexicalWeight at fusion time; this method
+// stays a pure lexical ranker and does not know its own weight.
+//
+// rrfK is the rank-damping constant (standard 60); it is passed in by Search
+// so the lexical and vector halves share one config source (Store.rrf.K).
 //
 // An empty result set returns a non-nil empty map, not nil.
-func (f *ftsIndex) search(ctx context.Context, query string, k int) (map[int64]float64, error) {
+func (f *ftsIndex) search(ctx context.Context, query string, k int, rrfK float64) (map[int64]float64, error) {
 	out := map[int64]float64{}
 	if k <= 0 || strings.TrimSpace(query) == "" {
 		return out, nil

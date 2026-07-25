@@ -1,14 +1,16 @@
 // Package memory — hybrid retrieval (T-042; change 0020 vector-only;
-// change 0021 restored the lexical half via an FTS5 shadow index).
+// change 0021 restored the lexical half via an FTS5 shadow index;
+// change 0024 made the RRF fusion tunable).
 //
-// Search fuses two ranked lists via Reciprocal Rank Fusion (RRF):
+// Search fuses two ranked lists via weighted Reciprocal Rank Fusion:
 //   - vector KNN: Turso's vector_distance_cos against the embedding column.
 //   - lexical bm25: the modernc.org/sqlite FTS5 shadow index (when present).
 //
-// Each half contributes 1/(rrfK+rank) per result; the fused score is their
-// sum. When the shadow is absent (Open without WithFTS), Search is the
-// change 0020 vector-only path. When present, lexical matches boost the
-// chunks whose text contains the query terms.
+// Each half contributes w/(K+rank) where w is the half's weight and K the
+// rank-damping constant (standard 60), both from Store.rrf (DefaultRRF =
+// {60, 1, 1} — the change-0021 equal-weight behavior). When the shadow is
+// absent (Open without WithFTS), Search is vector-only; LexicalWeight has
+// no effect. See WithRRF / RRFConfig.
 package memory
 
 import (
@@ -23,19 +25,16 @@ type Result struct {
 	ID     int64
 	Text   string
 	Source string
-	Score  float64 // fused RRF score (higher = more relevant)
+	Score  float64 // fused weighted-RRF score (higher = more relevant)
 }
 
-// rrfK is the Reciprocal Rank Fusion constant (standard value 60).
-const rrfK = 60.0
-
-// Search runs vector-distance retrieval, returning the top-k chunks
-// ordered by Turso's vector_distance_cos. Returns nil (no error) if
-// nothing has been written yet.
+// Search runs hybrid vector+lexical retrieval, returning the top-k chunks
+// ranked by weighted Reciprocal Rank Fusion of the two halves. Returns nil
+// (no error) if nothing has been written yet.
 //
-// Hybrid lexical+vector search is the post-0020 stretch goal; the RRF
-// harness is preserved in case the lexical half returns in a future
-// change. Until then, Search is a single-source vector KNN.
+// The fusion weights and K come from Store.rrf (DefaultRRF = {60, 1, 1},
+// applied by Open). Override with the WithRRF option. When the FTS shadow
+// is absent, Search is the change-0020 vector-only path.
 func (s *Store) Search(ctx context.Context, query string, k int) ([]Result, error) {
 	if !s.migrated || s.Embedder == nil {
 		return nil, nil
@@ -58,6 +57,7 @@ func (s *Store) Search(ctx context.Context, query string, k int) ([]Result, erro
 	// Vector KNN via Turso's vector_distance_cos on the embedded column.
 	// The column is on the chunks table itself (post-0020), so the FROM
 	// is chunks, not chunks_vec. ORDER BY distance gives the KNN order.
+	// Contribution is VectorWeight/(K+rank) (change 0024).
 	vecRows, err := s.db.QueryContext(ctx,
 		`SELECT id FROM chunks
 		 ORDER BY vector_distance_cos(embedding, vector32(?))
@@ -72,21 +72,23 @@ func (s *Store) Search(ctx context.Context, query string, k int) ([]Result, erro
 			vecRows.Close()
 			return nil, err
 		}
-		scores[id] += 1.0 / (rrfK + float64(rank))
+		scores[id] += s.rrf.VectorWeight / (s.rrf.K + float64(rank))
 	}
 	vecRows.Close()
 
-	// Lexical half (change 0021): when the FTS shadow is present, fuse its
-	// bm25-ranked results into the same score map via RRF. A chunk that the
-	// vector half ranked outside its top-k can still surface here, because
-	// RRF unions the two ranked lists before trimming to k.
+	// Lexical half (change 0021; weighted in 0024): when the FTS shadow is
+	// present, fuse its bm25-ranked results into the same score map. The
+	// shadow returns raw 1/(K+rank) contributions; Search scales them by
+	// LexicalWeight so both weights live in one config. A chunk the vector
+	// half ranked outside its top-k can still surface here, because RRF
+	// unions the two ranked lists before trimming to k.
 	if s.fts != nil {
-		ftsScores, err := s.fts.search(ctx, query, k)
+		ftsScores, err := s.fts.search(ctx, query, k, s.rrf.K)
 		if err != nil {
 			return nil, fmt.Errorf("memory: fts search: %w", err)
 		}
 		for id, contribution := range ftsScores {
-			scores[id] += contribution
+			scores[id] += s.rrf.LexicalWeight * contribution
 		}
 	}
 
