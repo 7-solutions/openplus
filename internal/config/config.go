@@ -49,6 +49,21 @@ type Config struct {
 
 	// TUI configures the front-end's appearance (change 0017).
 	TUI TUI
+
+	// Max configures Max Mode, the best-of-N sampler (change 0016).
+	Max Max
+}
+
+// Max is the Max Mode configuration (change 0016, ADR-0011). Max Mode is opt-in
+// per invocation; this only sets its defaults.
+type Max struct {
+	// Samples is the default N for /max. Zero means orchestrate.DefaultSamples;
+	// a value above the cap is clamped at use, with the clamp reported.
+	Samples int
+	// Model is the judge model id ("<provider>/<model>"). Empty judges with the
+	// session's model — an independent judge is better, but requiring one would
+	// make Max Mode unusable on a single-model setup.
+	Model string
 }
 
 // TUI is the front-end configuration (change 0017, ADR-0012).
@@ -200,6 +215,7 @@ func Load(path string) (*Config, error) {
 		},
 		Coordination: Coordination{Backend: doc.Coordination.Backend},
 		TUI:          TUI{Theme: doc.TUI.Theme},
+		Max:          Max{Samples: doc.Max.Samples, Model: doc.Max.Model},
 	}
 	cfg.Embedder.applyEnvOverrides()
 	cfg.Memory.applyEnvOverrides()
@@ -350,6 +366,10 @@ type rawConfig struct {
 	TUI struct {
 		Theme string `json:"theme"`
 	} `json:"tui"`
+	Max struct {
+		Samples int    `json:"samples"`
+		Model   string `json:"model"`
+	} `json:"max"`
 }
 
 type rawProvider struct {

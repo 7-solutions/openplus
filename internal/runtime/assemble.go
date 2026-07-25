@@ -184,6 +184,13 @@ type Session struct {
 	// Runs records each turn's tool sequence for /distill.
 	Runs []improve.Run
 
+	// MaxSamples is the default N for /max (change 0016). Zero uses
+	// orchestrate.DefaultSamples; over-cap values are clamped at use.
+	MaxSamples int
+	// MaxModel is the judge model /max ranks with. Empty judges with the
+	// session's own model.
+	MaxModel string
+
 	// ConfigPath is the resolved opencode.json this session was loaded from,
 	// whether or not the file exists. /theme persists into it.
 	ConfigPath string
@@ -250,6 +257,8 @@ func Assemble(root string, opts Options) (*Session, error) {
 		ConfigPath:         config.ResolveConfigPath(root, opts.ConfigPath),
 		Config:             pc.Config,
 		SystemPrompt:       pc.SystemPrompt(base),
+		MaxSamples:         pc.Config.Max.Samples,
+		MaxModel:           pc.Config.Max.Model,
 		Goal:               opts.Goal,
 		Judge:              opts.Judge,
 		MaxJudgeIterations: opts.MaxJudgeIterations,

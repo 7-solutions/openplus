@@ -4,11 +4,14 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/7solutions/openplus/internal/compose"
 	"github.com/7solutions/openplus/internal/config"
 	"github.com/7solutions/openplus/internal/improve"
+	"github.com/7solutions/openplus/internal/orchestrate"
+	"github.com/7solutions/openplus/internal/provider"
 )
 
 // builtinCommands is the dispatch table. Every entry closes a milestone
@@ -104,6 +107,13 @@ var builtinCommands = map[string]Command{
 	"workflows": {
 		Name: "workflows", Usage: "/workflows", Summary: "list registered workflows",
 		Run: (*Session).cmdWorkflows,
+	},
+
+	// --- max mode (change 0016, ADR-0011) ---
+	"max": {
+		Name: "max", Usage: "/max [n] <prompt>",
+		Summary: "answer once from n sampled candidates, judged (best-of-N)",
+		Run:     (*Session).cmdMax,
 	},
 
 	// --- appearance (change 0017, ADR-0012) ---
@@ -394,6 +404,74 @@ func (s *Session) cmdDream(_ string) (string, error) {
 		}
 	}
 	return fmt.Sprintf("appended %d fact(s) to MEMORY.md", len(facts)), nil
+}
+
+// --- max mode ---
+
+// cmdMax answers a prompt by sampling N candidates and returning the one an
+// independent judge picks (change 0016). It is opt-in per invocation: a normal
+// turn never pays for N generations.
+//
+// A leading integer is the sample count, but only when a prompt follows it — so
+// "/max 3" is a missing prompt rather than a request to answer "3".
+func (s *Session) cmdMax(args string) (string, error) {
+	if s.Provider == nil {
+		return "", fmt.Errorf("runtime: /max needs a provider")
+	}
+
+	n := s.MaxSamples
+	prompt := strings.TrimSpace(args)
+	head, rest, _ := strings.Cut(prompt, " ")
+	if parsed, err := strconv.Atoi(head); err == nil {
+		n = parsed
+		prompt = strings.TrimSpace(rest)
+	}
+	if prompt == "" {
+		return "", fmt.Errorf("runtime: /max needs a prompt (usage: /max [n] <prompt>)")
+	}
+
+	samples, note := orchestrate.ClampSamples(n)
+	judgeModel := s.MaxModel
+	if judgeModel == "" {
+		judgeModel = s.Model
+	}
+
+	m := orchestrate.MaxMode{
+		Sampler: orchestrate.Sampler{
+			Provider: s.Provider,
+			Runner:   orchestrate.Runner{MaxParallel: s.MaxSubagentParallel},
+		},
+		Ranker: orchestrate.Ranker{Provider: s.Provider, Model: judgeModel},
+	}
+
+	req := provider.Request{
+		Model:  s.Model,
+		System: s.SystemPrompt,
+		Messages: []provider.Message{{
+			Role:   provider.RoleUser,
+			Blocks: []provider.Block{{Kind: provider.BlockText, Text: prompt}},
+		}},
+		// No tools: candidates answer, they do not act (the sampler enforces
+		// this too; passing none makes the intent explicit here).
+	}
+
+	best, err := m.Run(context.Background(), req, samples)
+	if err != nil {
+		return "", fmt.Errorf("runtime: /max: %w", err)
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "best of %d (candidate %d)", samples, best.Index)
+	if note != "" {
+		fmt.Fprintf(&b, " — %s", note)
+	}
+	b.WriteByte('\n')
+	if best.Rationale != "" {
+		fmt.Fprintf(&b, "judge: %s\n", best.Rationale)
+	}
+	b.WriteByte('\n')
+	b.WriteString(strings.TrimRight(best.Text, "\n"))
+	return b.String(), nil
 }
 
 // --- appearance ---

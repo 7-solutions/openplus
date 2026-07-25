@@ -47,10 +47,11 @@ Checkpointer · PolicyGate · Workflow. Layout is in
 - **Latest-stable, lockfile-pinned.** Bump only after green tests.
 
 ## Refuse in v1 (recognize and decline — backlog, each needs its ADR trigger)
-Voice/ASR · Max Mode (best-of-N + judge) · MCP marketplace · web/share UI · hosted
-multi-tenant server mode. If a task seems to need one, **stop and flag it** — the
-trigger has not fired. (goja `.js` workflow compatibility was on this list; change
-0014 shipped it behind `/workflow load` — ADR-0009.)
+Voice/ASR · MCP marketplace · web/share UI · hosted multi-tenant server mode. If a
+task seems to need one, **stop and flag it** — the trigger has not fired. (goja
+`.js` workflow compatibility was on this list; change 0014 shipped it behind
+`/workflow load` — ADR-0009. Max Mode (best-of-N + judge) was too; change 0016
+shipped it behind `/max` — ADR-0011.)
 
 ## Self-check before "done"
 - [ ] Approved OpenSpec PLAN + SPEC + TASKS existed before code
