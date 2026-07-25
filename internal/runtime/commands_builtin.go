@@ -92,7 +92,7 @@ var builtinCommands = map[string]Command{
 
 	// --- orchestration (ADR-0002 #4, #7) ---
 	"subagents": {
-		Name: "subagents", Usage: "/subagents <prompt> | <prompt> …",
+		Name: "subagents", Usage: "/subagents [--coordinated] <prompt>[#sym] | …",
 		Summary: "run prompts as parallel subagents in isolated worktrees",
 		Run:     (*Session).cmdSubagents,
 	},
@@ -391,10 +391,30 @@ func (s *Session) cmdDream(_ string) (string, error) {
 
 // --- orchestration ---
 
+// coordinatedFlag opts a fan-out into symbol-coordinated mode.
+const coordinatedFlag = "--coordinated"
+
 // cmdSubagents fans prompts out as parallel subagents. Prompts are separated by
 // "|" so an individual prompt can contain spaces; blank segments are dropped so a
 // trailing or doubled separator is forgiving rather than an error.
+//
+// With --coordinated, each prompt must name the symbols it will edit
+// (prompt#file.go::Func) and the fan-out claims them before running, merging each
+// subagent's work on success. Without it, behavior is unchanged: isolated
+// worktrees, text results, nothing written to the repository.
 func (s *Session) cmdSubagents(args string) (string, error) {
+	if rest, ok := cutFlag(args, coordinatedFlag); ok {
+		tasks, err := parseCoordinatedTasks(rest)
+		if err != nil {
+			return "", err
+		}
+		results, err := s.FanoutCoordinated(context.Background(), tasks)
+		if err != nil {
+			return "", err
+		}
+		return CoordinatedReport(results), nil
+	}
+
 	var prompts []string
 	for _, seg := range strings.Split(args, "|") {
 		if p := strings.TrimSpace(seg); p != "" {
@@ -411,6 +431,17 @@ func (s *Session) cmdSubagents(args string) (string, error) {
 		return "", err
 	}
 	return FanoutReport(prompts, results), nil
+}
+
+// cutFlag removes a leading flag from an argument string, reporting whether it was
+// present. Only a leading position is honored, so a "--coordinated" appearing
+// inside a prompt is treated as prompt text rather than silently changing mode.
+func cutFlag(args, flag string) (string, bool) {
+	trimmed := strings.TrimSpace(args)
+	if !strings.HasPrefix(trimmed, flag) {
+		return args, false
+	}
+	return strings.TrimSpace(strings.TrimPrefix(trimmed, flag)), true
 }
 
 // cmdDistill mines the session's recorded tool sequences and scaffolds the

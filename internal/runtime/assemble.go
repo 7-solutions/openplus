@@ -157,6 +157,11 @@ type Session struct {
 	// Workflows holds the registered deterministic workflows (ADR-0006),
 	// keyed by name and invoked with /workflow.
 	Workflows map[string]orchestrate.Workflow
+
+	// Coordinator locks code symbols before subagents edit them (change 0012).
+	// Defaults to NoCoordinator, so coordinated fan-out is unavailable until a
+	// real coordinator (grit) is wired and installed.
+	Coordinator orchestrate.Coordinator
 	// OnCompact reports a compaction as (before, after) message counts, so a
 	// front-end can tell the user rather than the context shrinking invisibly.
 	// Nil is a no-op.
@@ -272,6 +277,12 @@ func Assemble(root string, opts Options) (*Session, error) {
 
 	// Built-in workflows (ADR-0006).
 	s.registerWorkflows()
+
+	// Symbol coordination (change 0012). The grit adapter reports itself
+	// unavailable when the binary is absent, so this is safe to wire
+	// unconditionally: coordinated fan-out then refuses with an explanation
+	// rather than the feature silently not existing.
+	s.Coordinator = &orchestrate.GritCoordinator{RepoRoot: root}
 
 	// Checkpointing (ADR-0008). A window is required: without one there is no
 	// high-water mark to cross, so the feature stays off rather than guessing.
