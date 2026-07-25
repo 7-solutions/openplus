@@ -40,25 +40,33 @@
       Done — 471ee1c.
 
 ## B — Memory config deltas
-- [ ] T-410 RED `TestMemoryAutoOpenFalseMissingPathFails`: assemble with
+- [x] T-410 RED `TestMemoryAutoOpenFalseMissingPathFails`: assemble with
       `memory.autoOpen=false` (default), path that doesn't exist; assert
       `runtime.Assemble` returns an error wrapping `os.ErrNotExist`.
-- [ ] T-411 RED `TestMemoryAutoOpenTrueCreatesPath`: same path, but
+      Done — c7df292.
+- [x] T-411 RED `TestMemoryAutoOpenTrueCreatesPath`: same path, but
       `"autoOpen": true`; assert the file is created and `Session.Memory`
       is non-nil.
-- [ ] T-412 Add `Memory.AutoOpen bool` (default false) and respect it in
+      Done — c7df292.
+- [x] T-412 Add `Memory.AutoOpen bool` (default false) and respect it in
       `assembleMemory`.
-- [ ] T-413 RED `TestMemoryEnvPathOverride`: setenv `OPENPLUS_MEMORY_PATH`,
+      Done — c7df292.
+- [x] T-413 RED `TestMemoryEnvPathOverride`: setenv `OPENPLUS_MEMORY_PATH`,
       assemble; assert the store opens at that path, not the configured one.
-- [ ] T-414 Apply the env override at the same priority as the embedder
+      Done — e254bdc.
+- [x] T-414 Apply the env override at the same priority as the embedder
       env overrides (T-402).
-- [ ] T-415 RED `TestMemoryMaxEntriesZeroIsUnbounded`,
+      Done — c7df292 (wired in `Memory.applyEnvOverrides`; T-413 is the
+      regression guard).
+- [x] T-415 RED `TestMemoryMaxEntriesZeroIsUnbounded`,
       `TestMemoryMaxEntriesCapEvictsOldest`: assemble with
       `memory.maxEntries=2`, write 5 chunks, assert 2 are retained and the
       2 retained are the most recent.
-- [ ] T-416 Add `Memory.MaxEntries int` (0 = unbounded) and `memory.Store`
+      Done — 5326ad9.
+- [x] T-416 Add `Memory.MaxEntries int` (0 = unbounded) and `memory.Store`
       gains `SetMaxEntries` that prunes oldest-first on each write. Keep
       the unbounded path zero-cost.
+      Done — 5326ad9.
 
 ## C — `cmd/openplus` wiring deltas
 - [ ] T-420 RED `TestMainVersion`: `run()` with `--version` flag returns
