@@ -68,8 +68,8 @@
 - [x] T-072 Goal/stop-condition with independent judge model.
 
 ## M8 — Compose (ADR-0002)
-- [ ] T-080 Compose phase machine: grill→spec→implement→verify→review→finish.
-- [ ] T-081 TDD-per-task gate + Advisor review gate wired into review phase.
+- [x] T-080 Compose phase machine: grill→spec→implement→verify→review→finish.
+- [x] T-081 TDD-per-task gate + Advisor review gate wired into review phase.
 
 ## M9 — Self-improvement
 - [ ] T-090 `/dream`: traces→memory extraction + stale-entry pruning.
