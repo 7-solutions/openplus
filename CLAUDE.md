@@ -3,8 +3,16 @@
 **Canonical instructions live in [`AGENTS.md`](./AGENTS.md).** Read it first — it holds
 the stack, the build gate, the ports, the ADR index, the hard rules, and the deferred list.
 
+## Hard rules (mirrored from AGENTS.md §Hard rules)
+- **Core depends on ports, not on adapters — at the package level.** `internal/ports/`
+  is the canonical home of every port's interface AND its neutral types; concrete
+  adapters live in `internal/provider/`. No core package may import `internal/provider/`.
+  The regression test `internal/ports/leak_guard_test.go` fails the build if it does.
+- **Every hard rule arrives with a regression test.** When adding a rule to AGENTS.md,
+  add a failing test in the same slice.
+
 ## Claude Code specifics
 - Follow the build gate in `AGENTS.md` exactly. Gate 1 (OpenSpec PLAN+SPEC+TASKS with a
   STOP for approval) is mandatory — do not write code before an approved spec.
 - The build procedure is packaged as a skill: `.claude/skills/openplus-build/SKILL.md`.
-- ADRs: `docs/adr/`. Specs: `openspec/specs/`. Active change: `openspec/changes/0001-foundation/`.
+- ADRs: `docs/adr/`. Specs: `openspec/specs/`. Most recent change: `openspec/changes/0018-provider-port-extraction/`.

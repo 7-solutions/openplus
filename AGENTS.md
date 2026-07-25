@@ -42,6 +42,17 @@ Checkpointer · PolicyGate · Workflow. Layout is in
   mattn+cgo). Single static binary; trivial cross-compile.
 - **Provider neutrality.** The loop and all subsystems use only the neutral model.
   No provider-specific type escapes `internal/provider`.
+- **Core depends on ports, not on adapters — at the package level.** After change
+  0018, `internal/ports/` is the canonical home of every port's interface AND its
+  neutral types. Concrete adapters (Anthropic, OpenAI-compatible, prefix-select,
+  SSE helper) live in `internal/provider/`. No core package may import
+  `internal/provider/`; the regression test
+  `internal/ports/leak_guard_test.go` fails the build if it does.
+- **Every hard rule arrives with a regression test.** Architectural rules in this
+  file must be backed by a failing test that fails the build when the rule is
+  violated. Examples: `internal/ports/leak_guard_test.go` (package-level core/
+  adapter split); `//go:build offline` loader-presence tests (build-tag discipline).
+  When you add a new hard rule to this section, add the test in the same slice.
 - **Privacy.** Memory + embeddings stay local by default; chunk text never leaves the host.
 - **Defer-behind-port, add-on-trigger.** See the deferred list; do not build it early.
 - **Latest-stable, lockfile-pinned.** Bump only after green tests.
