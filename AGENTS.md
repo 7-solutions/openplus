@@ -36,6 +36,7 @@ Checkpointer · PolicyGate · Workflow. Layout is in
 - ADR-0007 permission gate as control-plane ES256 seam
 - ADR-0008 context budgeter / tokenizer / reconstruction
 - ADR-0009 JS workflow adapter — goja trigger fired (behind the Workflow port)
+- ADR-0016 Context7 as the default docs MCP source (auto-inject-if-empty; change 0025)
 
 ## Hard rules
 - **Pure Go / cgo-free.** No cgo in the default build (that is why ncruces+wazero, not

@@ -258,6 +258,15 @@ func Assemble(root string, opts Options) (*Session, error) {
 		return nil, err
 	}
 
+	// Default docs source (change 0025, ADR-0016): auto-connect Context7 when the
+	// user has declared no MCP servers. Skipped in fake mode — a fake session
+	// stands for a hermetic test and must not dial real external services.
+	// Applied here, after Load and before the Session is built, so s.Config and
+	// startMCPServers both see it.
+	if !opts.Fake {
+		applyDefaultMCP(pc.Config)
+	}
+
 	base := opts.BaseSystemPrompt
 	if base == "" {
 		base = DefaultBaseSystemPrompt

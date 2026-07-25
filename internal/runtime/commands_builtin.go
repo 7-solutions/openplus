@@ -2,7 +2,9 @@ package runtime
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -120,6 +122,13 @@ var builtinCommands = map[string]Command{
 	"theme": {
 		Name: "theme", Usage: "/theme [name]", Summary: "list color themes, or switch to one",
 		Run: (*Session).cmdTheme,
+	},
+
+	// --- docs (change 0025, ADR-0016) ---
+	"docs": {
+		Name: "docs", Usage: "/docs <library> [query]",
+		Summary: "fetch up-to-date library docs via Context7",
+		Run:    (*Session).cmdDocs,
 	},
 }
 
@@ -622,4 +631,77 @@ func (s *Session) cmdDistill(args string) (string, error) {
 	}
 	return fmt.Sprintf("distilled %s (%d runs) into %s: %s",
 		strings.Join(top.Tools, "→"), top.Runs, kind, path), nil
+}
+
+// --- docs (change 0025, ADR-0016) ---
+
+// context7 tool names as they appear in the registry after namespacing.
+var (
+	context7ResolveTool = defaultContext7Name + ".resolve-library-id"
+	context7QueryTool   = defaultContext7Name + ".query-docs"
+)
+
+// libraryIDRe extracts the first Context7 library id from a resolve-library-id
+// result. The result is the MCP text content — typically a JSON blob whose id
+// values look like "/facebook/react". Parsing the id defensively (rather than
+// assuming an exact envelope) tolerates Context7 changing its wrapper shape.
+var libraryIDRe = regexp.MustCompile(`(?s)"id"\s*:\s*"([^"]+)"`)
+
+// cmdDocs fetches up-to-date library docs from Context7. It is direct,
+// read-only user action — not routed through PolicyGate (the autonomous agent
+// loop's calls to context7.* tools still are). Returns the docs text.
+func (s *Session) cmdDocs(args string) (string, error) {
+	args = strings.TrimSpace(args)
+	if args == "" {
+		return "", fmt.Errorf("runtime: /docs needs a library name; usage: /docs <library> [query]")
+	}
+	parts := strings.SplitN(args, " ", 2)
+	libraryName := parts[0]
+	query := "usage and API overview"
+	if len(parts) == 2 && strings.TrimSpace(parts[1]) != "" {
+		query = strings.TrimSpace(parts[1])
+	}
+
+	resolve, ok := s.Tools.Get(context7ResolveTool)
+	if !ok {
+		return "", fmt.Errorf("runtime: Context7 docs not connected. " +
+			"Run with no `mcp` config to get the default, or add `mcp.context7` " +
+			"pointing at https://mcp.context7.com/mcp")
+	}
+
+	ctx := context.Background()
+	resolveOut, err := resolve.Execute(ctx, jsonString(map[string]string{
+		"libraryName": libraryName,
+		"query":       query,
+	}))
+	if err != nil {
+		return "", fmt.Errorf("runtime: /docs resolve-library-id: %w", err)
+	}
+	libraryID := libraryIDRe.FindStringSubmatch(resolveOut)
+	if len(libraryID) < 2 {
+		return "", fmt.Errorf("runtime: /docs: Context7 returned no library matching %q", libraryName)
+	}
+
+	queryTool, ok := s.Tools.Get(context7QueryTool)
+	if !ok {
+		return "", fmt.Errorf("runtime: Context7 %s tool unavailable", context7QueryTool)
+	}
+	docs, err := queryTool.Execute(ctx, jsonString(map[string]string{
+		"libraryId": libraryID[1],
+		"query":     query,
+	}))
+	if err != nil {
+		return "", fmt.Errorf("runtime: /docs query-docs: %w", err)
+	}
+	return docs, nil
+}
+
+// jsonString marshals m for a tool call; the inputs here are simple string maps
+// so an encode failure is a programmer error.
+func jsonString(m map[string]string) json.RawMessage {
+	b, err := json.Marshal(m)
+	if err != nil {
+		panic(fmt.Sprintf("runtime: encode tool args: %v", err))
+	}
+	return b
 }

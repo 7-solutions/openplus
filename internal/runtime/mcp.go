@@ -3,12 +3,70 @@ package runtime
 import (
 	"context"
 	"fmt"
+	"os"
 	"sort"
+	"strings"
 
 	"github.com/7solutions/openplus/internal/config"
 	"github.com/7solutions/openplus/internal/mcp"
 	"github.com/7solutions/openplus/internal/tool"
 )
+
+// --- default docs source (change 0025, ADR-0016) ---
+//
+// Context7 (Upstash) is auto-connected as a docs source when the user has
+// declared ZERO MCP servers — zero-config for fresh sessions. The instant they
+// configure any mcp.* entry, the default disappears and they own the MCP
+// surface. Set OPENPLUS_DEFAULT_DOCS=0|false|off to suppress even when empty
+// (privacy-controlled environments).
+const (
+	defaultContext7Name     = "context7"
+	defaultContext7Endpoint = "https://mcp.context7.com/mcp"
+	context7APIKeyHeader    = "CONTEXT7_API_KEY" // env var of the same name carries the value
+	openplusDefaultDocsEnv  = "OPENPLUS_DEFAULT_DOCS"
+)
+
+// defaultDocsDisabled reports whether the env kill-switch is set. Recognized
+// falsey values: 0, false, off (case-insensitive). Empty/unset = enabled.
+func defaultDocsDisabled() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(openplusDefaultDocsEnv))) {
+	case "0", "false", "off":
+		return true
+	}
+	return false
+}
+
+// defaultContext7Server builds the Context7 HTTP declaration. If
+// CONTEXT7_API_KEY is set it is forwarded as the auth header (higher rate
+// limits); basic use is key-less.
+func defaultContext7Server() config.MCPServer {
+	headers := map[string]string{}
+	if key := os.Getenv(context7APIKeyHeader); key != "" {
+		headers[context7APIKeyHeader] = key
+	}
+	return config.MCPServer{
+		Name:      defaultContext7Name,
+		Transport: config.MCPTransportHTTP,
+		URL:       defaultContext7Endpoint,
+		Headers:   headers,
+	}
+}
+
+// applyDefaultMCP injects the Context7 default docs server when the config has
+// no MCP servers and the kill-switch is off. It is a runtime use-site default
+// (same convention as DefaultBudget / DefaultMemoryPath), applied after
+// config.Load and before Assemble builds the Session.
+func applyDefaultMCP(cfg *config.Config) {
+	if defaultDocsDisabled() {
+		return
+	}
+	if len(cfg.MCP) > 0 {
+		return
+	}
+	cfg.MCP = map[string]config.MCPServer{
+		defaultContext7Name: defaultContext7Server(),
+	}
+}
 
 // startMCPServers connects to every declared MCP server and returns their tools,
 // adapted to the Tool port, plus a warning per server that could not be used.
