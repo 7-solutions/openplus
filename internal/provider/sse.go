@@ -1,7 +1,12 @@
-// SSE reader for provider adapters (T-011). Stdlib-only, no vendor SDK.
-// Both the anthropic and openaicompat adapters (T-012/T-013, not yet
-// scaffolded — see backlog) will parse their own event payloads on top of
-// this generic frame reader.
+// Package provider holds the concrete model adapters and adapter-only helpers.
+//
+// After change 0018, every provider-neutral type (Request, Event, Message,
+// Block, BlockKind, Role, ToolSchema, ToolCall, Usage, EventKind) and the
+// Provider interface live in internal/ports — that is the canonical surface
+// the core depends on. This package retains only what an adapter author
+// needs: the anthropic and openaicompat backends, the prefix-select registry,
+// and the shared SSE frame reader in this file. Core packages must not import
+// here; internal/ports/leak_guard_test.go enforces that.
 package provider
 
 import (

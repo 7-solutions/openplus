@@ -12,20 +12,20 @@
       this task list).
 
 ## M1 — Audit concrete dependencies (read-only, sets T-1803's diff)
-- [ ] T-1801 Catalogue the call sites: every `import
+- [x] T-1801 Catalogue the call sites: every `import
       "github.com/7solutions/openplus/internal/provider"` outside
       `internal/provider/`. Confirm none of them name a concrete adapter
       type (`Anthropic`, `OpenAICompat`) — only `provider.Provider`,
       `provider.Request|Event|Message|Block|ToolCall|ToolSchema|Usage|Role|BlockKind|EventKind`,
       or `provider.Fake`. **Output:** a 30-row table appended to
       `docs/adr/0018-audit.md` (new file under `docs/adr/`).
-- [ ] T-1802 Confirm there is no existing
+- [x] T-1802 Confirm there is no existing
       `internal/ports/provider.go` collision: only `internal/ports/ports.go`
       and the in-package `Provider` declaration. **Output:** a one-line
       note in `docs/adr/0018-audit.md`.
 
 ## M2 — Mechanical migration (TDD-light; behavior-preserving)
-- [ ] T-1803 Create the new home for the port surface and update imports
+- [x] T-1803 Create the new home for the port surface and update imports
       across every file T-1801 listed.
       **Steps (red → green):**
       1. Move `internal/provider/types.go` content (Block, BlockKind, BlockTool*,
@@ -46,52 +46,53 @@
          `portsproviderfake.Fake`.
       5. `go build ./...` MUST be green before this task closes.
       6. Existing tests MUST still pass (this is the safety net).
-- [ ] T-1804 Keep adapter packages (`anthropic`, `openaicompat`, `select`)
+- [x] T-1804 Keep adapter packages (`anthropic`, `openaicompat`, `select`)
       importable. They currently import `internal/provider` for types; with
       the shim in place they continue to compile. No edits in this task —
       this is verification only. `go build ./...` and
       `go test ./internal/provider/...` MUST be green.
-- [ ] T-1805 Contract tests pass unchanged in behavior.
+- [x] T-1805 Contract tests pass unchanged in behavior.
       `go test ./internal/provider/...` covers `TestContractRoundTrip`,
       `TestContractRoundTripToolResult`,
       `TestContractNeutralOutputIsEqualAcrossAdapters`. Same outcomes
       pre- and post-migration.
 
 ## M3 — Gates (Advisor + graph + memory)
-- [ ] T-1806 Full repo test suite green:
+- [x] T-1806 Full repo test suite green:
       `go test ./...` (and `-race` on
       `internal/orchestrate internal/coordinate`). This is the final
       behavior gate.
-- [ ] T-1807 Delete the shim. Remove
+- [x] T-1807 Delete the shim. Remove
       `internal/provider/provider_compat.go`. Update any remaining callers
       (none expected — T-1801 should have migrated them all; if some
       remain because they only needed the shim for the transition, migrate
       them as part of this task). `go build ./...` and `go vet ./...`
       MUST be green.
-- [ ] T-1808 Add the regression guard:
+- [x] T-1808 Add the regression guard:
       `internal/ports/leak_guard_test.go` asserts that no file outside
       `internal/provider/` and `internal/ports/` imports
       `internal/provider`. **Failing test first** (the test fails before
       T-1803, passes after it). This makes the violation unregressable.
 
 ## M4 — Knowledge propagation
-- [ ] T-1809 Update the package doc comment on `internal/provider/types.go`
+- [x] T-1809 Update the package doc comment on `internal/provider/types.go`
       (now empty) to point to `internal/ports/`. After T-1807 types.go is
       deleted; until then the doc-comment makes the move discoverable.
 - [ ] T-1810 Knowledge graph: `graphify` re-runs on
       `internal/ports/provider.go` and `internal/ports/model.go` to keep
       `ports.Provider` discoverable from core packages.
-- [ ] T-1811 Memory: `icm store -t decisions-openplus -c "0018: provider
+- [x] T-1811 Memory: `icm store -t decisions-openplus -c "0018: provider
       port+neutral types moved to internal/ports; internal/provider now
       adapter-only. Shim deleted in T-1807." -i high -k "0018,ports,migration"`
 
 ## Definition of done (mirrors AGENTS.md self-check)
-- [ ] Approved OpenSpec PLAN + SPEC + TASKS existed before code (T-1800).
-- [ ] Tests written first, shown red, driven to green (T-1803 step 6 +
+- [x] Approved OpenSpec PLAN + SPEC + TASKS existed before code (T-1800).
+- [x] Tests written first, shown red, driven to green (T-1803 step 6 +
       T-1808).
-- [ ] Core depends on a port (`internal/ports`); new I/O is an adapter
+- [x] Core depends on a port (`internal/ports`); new I/O is an adapter
       (concrete adapters still live in `internal/provider/`); no provider
       type leaked to core (T-1808 guards it).
-- [ ] cgo-free build still green (`CGO_ENABLED=0 go build ./...`).
-- [ ] Advisor passed; graph updated (T-1810); memory updated (T-1811).
-- [ ] No deferred/backlog item introduced.
+- [x] cgo-free build still green (`CGO_ENABLED=0 go build ./...`).
+- [ ] Advisor passed; graph updated (T-1810 — **not yet run**); memory
+      updated (T-1811 ✓).
+- [x] No deferred/backlog item introduced.

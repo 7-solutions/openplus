@@ -25,122 +25,87 @@ The only mirrored declaration is `Provider` — which is intentional today
 0018, the canonical home is `internal/ports`; the provider-package copy
 survives only via the shim deleted at T-1807.
 
-## T-1801: catalogue of import sites
+## T-1801: catalogue of import sites (as-shipped, verified post-migration)
 
-### Files inside `internal/provider/` (leave alone until shim is removed)
+Re-verified against the tree after commit `7b91e1a` landed the migration.
+The pre-migration "migration list" below is retained for history; the
+**as-shipped** state follows.
 
-These import siblings and `types.go` — they will be re-pointed at
-`internal/ports` during T-1803 alongside the shim, but they are not
-"core per AGENTS.md":
+### Pre-migration migration list (what T-1803 rewrote — historical)
 
-- `internal/provider/anthropic/anthropic.go`
-- `internal/provider/anthropic/anthropic_test.go`
-- `internal/provider/openaicompat/openaicompat.go`
-- `internal/provider/openaicompat/openaicompat_test.go`
-- `internal/provider/select/select.go`
-- `internal/provider/select/select_test.go`
-- `internal/provider/contract_test.go`
-- `internal/provider/types.go` (self; moves out)
+These files imported `internal/provider` before 0018. T-1803 rewrote every
+one to `internal/ports` (and `provider.Fake` → `portsfake.Fake`). No logic
+changed.
 
-### Files outside `internal/provider/` that import `internal/provider` (the migration list)
+- Group A — `*_test.go` using `provider.Fake`: `agent/loop_test.go`,
+  `improve/dream_test.go`, `orchestrate/{goal,maxmode}_test.go`,
+  `runtime/{accumulate,commands_behavior,compact,integration,max_cmd}_test.go`.
+- Group B — core packages, neutral types only: `agent/loop.go`,
+  `contextmgr/{budget,checkpoint,tokenizer}.go`, `improve/dream.go`,
+  `orchestrate/{goal,maxmode}.go`, `policy/policy.go`,
+  `runtime/{commands_builtin,fanout,turn,workflow}.go`, `tui/{model,prompt}.go`.
+- Group C — `*_test.go` using neutral types only (full list in git history).
+- Group D — `cmd/openplus/main.go` and `internal/ports/{ports,ports_test}.go`.
 
-Classified by what they actually use. **No file in this list constructs a
-concrete adapter** (`Anthropic`, `OpenAICompat`, etc.). All use is either
-the `Provider` interface, neutral types, or `provider.Fake` (test seam).
+### As-shipped verification (2026-07-26)
 
-#### Group A — `*_test.go` files using `provider.Fake` (need portsfake)
+Greps re-run against the current tree:
 
-- `internal/agent/loop_test.go`
-- `internal/improve/dream_test.go`
-- `internal/orchestrate/goal_test.go`
-- `internal/orchestrate/maxmode_test.go`
-- `internal/runtime/accumulate_test.go`
-- `internal/runtime/commands_behavior_test.go`
-- `internal/runtime/compact_test.go`
-- `internal/runtime/integration_test.go`
-- `internal/runtime/max_cmd_test.go`
+1. **Bare `internal/provider` import outside `internal/provider/`** —
+   `grep -rn '".../internal/provider"' --include=*.go .` excluding
+   `internal/provider/` returns **zero Go imports**. The only hit is
+   `internal/ports/leak_guard_test.go`, and that is a *string literal*
+   the guard matches against, not an import. ✓
+2. **51 files** import `internal/ports` (was 0 pre-migration). Sampled
+   Group B files (`agent/loop.go`, `contextmgr/budget.go`,
+   `orchestrate/goal.go`, `policy/policy.go`, `runtime/turn.go`,
+   `tui/model.go`): each imports `ports` once, `provider` zero times. ✓
+3. **Group A tests** now use `portsfake ".../internal/ports/providerfake"`
+   and `&portsfake.Fake{...}` — confirmed in `agent/loop_test.go`,
+   `runtime/accumulate_test.go`, `orchestrate/goal_test.go`. ✓
+4. **`cmd/openplus/main.go`** — zero `internal/provider` imports (only
+   comments and flag help text mention "provider"). Wiring delegated to
+   `runtime`. ✓
 
-#### Group B — core packages depending on neutral types only
+### Sanctioned adapter-surface imports (NOT leaks)
 
-- `internal/agent/loop.go`
-- `internal/contextmgr/budget.go`
-- `internal/contextmgr/checkpoint.go`
-- `internal/contextmgr/tokenizer.go`
-- `internal/improve/dream.go`
-- `internal/orchestrate/goal.go`
-- `internal/orchestrate/maxmode.go`
-- `internal/policy/policy.go`
-- `internal/runtime/assemble.go`
-- `internal/runtime/commands_builtin.go`
-- `internal/runtime/fanout.go`
-- `internal/runtime/turn.go`
-- `internal/runtime/workflow.go`
-- `internal/tui/model.go`
-- `internal/tui/prompt.go`
+The leak_guard regression (T-1808) bans the **bare** `internal/provider`
+package from `internal/` and `cmd/`; it permits two narrower surfaces,
+both present and intentional:
 
-#### Group C — `*_test.go` files using neutral types only
+- `internal/runtime/assemble.go:30` imports
+  `selectadapter ".../internal/provider/select"` and calls
+  `selectadapter.Select(model, cfg)` at line 391. `select` is the **adapter
+  registry** — the composition seam, not a concrete backend. This is the
+  sanctioned way core obtains a `ports.Provider` from config.
+- `internal/runtime/assemble_test.go:16-17` imports the leaf adapters
+  `provider/anthropic` and `provider/openaicompat` and type-asserts
+  `*anthropic.Adapter` / `*openaicompat.Adapter` (lines 55, 73, 153) to
+  prove `Select` routes to the right backend. This is **test-only wiring
+  verification**; it does not construct adapters in production core paths.
+  The guard does not flag subpath imports in `internal/`, so this is
+  allowed by design.
 
-- `internal/contextmgr/budget_test.go`
-- `internal/contextmgr/checkpoint_test.go`
-- `internal/contextmgr/tokenizer_test.go`
-- `internal/orchestrate/goal_test.go`  (also in Group A; overlaps)
-- `internal/policy/rules_test.go`
-- `internal/policy/skip_test.go`
-- `internal/runtime/assemble_test.go`
-- `internal/runtime/checkpoint_test.go`
-- `internal/runtime/checkpoint_write_test.go`
-- `internal/runtime/command_test.go`
-- `internal/runtime/fanout_test.go`
-- `internal/runtime/mcp_test.go`
-- `internal/runtime/turn_test.go`
-- `internal/runtime/workflow_test.go`
-- `internal/tui/dispatch_test.go`
-- `internal/tui/model_test.go`
-- `internal/tui/prompt_test.go`
-- `internal/tui/runner_test.go`
-- `internal/tui/theme_test.go`
+No **non-test** core file constructs a concrete adapter type
+(`Anthropic`, `OpenAICompat`). The 0006 self-check item-3 conclusion
+holds at the type level; 0018 closes it at the package level for the
+bare adapter import.
 
-#### Group D — `cmd/` and the ports package itself
+### Layout (as-shipped)
 
-- `cmd/openplus/main.go` — neutral types + adapter wiring (still allowed in
-  `cmd/` until T-1807; should also move)
-- `internal/ports/ports.go` — declares the `Provider` interface and re-exports
-  `provider.Request` etc. into port-test fakes (the mirroring comment)
-- `internal/ports/ports_test.go` — neutral types in tests
-
-### Tally
-
-- 1 file: `cmd/openplus/main.go` (production wiring)
-- 14 files: core packages (Group B)
-- ~20 files: tests (Groups A and C)
-- 8 files: `internal/provider/*` siblings (Group B's adapter side)
-- 2 files: `internal/ports/*` (the package itself; will become the canonical home)
-
-**Total: ~45 files touched.** This matches the proposal's "~30+ import
-rewrite surface". Every rewrite is a one-line import-path swap; no logic
-changes. Group A additionally needs `provider.Fake` →
-`portsproviderfake.Fake`.
-
-## Confirmation: no concrete adapter leaks
-
-`grep -rn "Anthropic\\.Adapter\\|OpenAICompat\\.Adapter\\|provider/anthropic\\.\\|provider/openaicompat\\." --include="*.go"` outside `internal/provider/` returns **zero matches**. The 0006 self-check item
-3 conclusion holds: only the package boundary remains coupled, which is
-what T-1803 closes.
-
-## What this audit rules out
-
-- **No new port is being introduced.** This change is a pure packaging move
-  of an existing port.
-- **No call-site refactor is required.** Only the import path changes.
-- **`provider.Fake`'s name is unchanged.** Only its package changes.
-
-## What this audit confirms as required
-
-- **A back-compat shim during migration.** Without it, every Group-A test
-  would need its `provider.Fake` reference rewritten in the same commit as
-  the type's package moves. The shim (T-1803 step 3) allows the rewrite
-  to be sequenced: types move first, shim holds, callers migrate
-  incrementally, then shim deletes at T-1807. This is the change
-  described in the proposal (under "Compatibility").
+- `internal/ports/`: `ports.go` (port interfaces incl. `Provider`),
+  `model.go` (all neutral types: `Block`, `BlockKind`, `Role`, `Message`,
+  `ToolSchema`, `Request`, `EventKind`, `ToolCall`, `Usage`, `Event`),
+  `ports_test.go`, `leak_guard_test.go` (T-1808),
+  `providerfake/fake.go` (`portsfake.Fake`).
+- `internal/provider/`: `sse.go` (adapter-only SSE helper) + the three
+  adapter subpackages `anthropic/`, `openaicompat/`, `select/` +
+  `contract_test.go`. `types.go`, `fake.go`, and the T-1803 transition
+  shim are **deleted** (T-1807 done — `test -f internal/provider/provider.go`
+  → no shim).
 
 ## Closed: T-1801 ✓, T-1802 ✓
+
+Both re-verified against the shipped tree on 2026-07-26. The migration
+landed in commit `7b91e1a`; the leak guard (`internal/ports/leak_guard_test.go`)
+enforces the package boundary going forward.
