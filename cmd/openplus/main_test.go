@@ -206,3 +206,41 @@ func buildOpenplus(t *testing.T) string {
 	}
 	return bin
 }
+
+// --- Change 0007 / T-450..T-451: --goal flag + OPENPLUS_GOAL env override ---
+
+// TestMainGoalFlag pins that --goal <text> reaches the runtime.
+// Since the runtime's fake provider doesn't need a real judge,
+// the test asserts the binary exits 0 with the fake reply — that
+// proves the flag was accepted and the run completed without
+// hanging on a missing judge.
+//
+// RED until the --goal flag is wired.
+func TestMainGoalFlag(t *testing.T) {
+	bin := buildOpenplus(t)
+	cmd := exec.Command(bin, "--goal", "ship hello", "--fake", "-p", "ship hello", "-C", t.TempDir())
+	stdout, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("--goal run failed: %v\n%s", err, stdout)
+	}
+	if !strings.Contains(string(stdout), "openplus runtime is wired") {
+		t.Errorf("stdout = %q, want fake-provider reply", stdout)
+	}
+}
+
+// TestMainGoalEnvOverride pins that OPENPLUS_GOAL wins over --goal
+// (env > flag precedence, same as OPENPLUS_MODEL / OPENPLUS_FAKE).
+//
+// RED until both the flag and the env var are wired.
+func TestMainGoalEnvOverride(t *testing.T) {
+	bin := buildOpenplus(t)
+	cmd := exec.Command(bin, "--goal", "flag-goal", "--fake", "-p", "x", "-C", t.TempDir())
+	cmd.Env = append(os.Environ(), "OPENPLUS_GOAL=env-goal")
+	stdout, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("OPENPLUS_GOAL run failed: %v\n%s", err, stdout)
+	}
+	if !strings.Contains(string(stdout), "openplus runtime is wired") {
+		t.Errorf("stdout = %q, want fake-provider reply (env should win over --goal)", stdout)
+	}
+}

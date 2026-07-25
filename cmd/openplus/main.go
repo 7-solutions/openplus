@@ -64,6 +64,7 @@ func run() error {
 		prompt     string
 		showVer    bool
 		configPath string
+		goal       string
 	)
 	flag.StringVar(&root, "C", ".", "project root")
 	flag.StringVar(&model, "model", "", "model id as <provider>/<model> (overrides opencode.json)")
@@ -73,11 +74,21 @@ func run() error {
 	flag.StringVar(&prompt, "p", "", "run a single turn with this prompt and exit")
 	flag.BoolVar(&showVer, "version", false, "print the build version and exit")
 	flag.StringVar(&configPath, "config", "", "path to opencode.json (default <root>/opencode.json)")
+	// --goal: long form only — no short form because the lowercase
+	// letters collide with existing flags (-C is project root).
+	// OPENPLUS_GOAL env override applies below, env > flag > precedence.
+	flag.StringVar(&goal, "goal", "", "stop the agent when this goal is met (consults Session.Judge if set)")
 	flag.Parse()
 
 	if showVer {
 		fmt.Println("openplus " + Version)
 		return nil
+	}
+
+	// Env overrides apply on top of Options (T-425 pattern). Precedence:
+	// env > flag > file. OPENPLUS_GOAL wins over --goal when set.
+	if v := os.Getenv("OPENPLUS_GOAL"); v != "" {
+		goal = v
 	}
 
 	// A bare prompt can also be passed positionally: openplus "do the thing".
@@ -91,6 +102,7 @@ func run() error {
 		Fake:             fake,
 		BaseSystemPrompt: baseSystemPrompt,
 		ConfigPath:       configPath,
+		Goal:             goal,
 	})
 	if err != nil {
 		return explain(err)
