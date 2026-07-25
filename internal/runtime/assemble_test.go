@@ -430,3 +430,39 @@ func TestAssembleMemoryAutoOpenCreatesPath(t *testing.T) {
 		t.Errorf("autoOpen=true: file should exist at %q: %v", target, err)
 	}
 }
+
+// --- Change 0004 / T-413: OPENPLUS_MEMORY_PATH env override ---
+//
+// Env wins over opencode.json's memory.path. The store must open at the
+// env path; the file value is irrelevant. Same precedence model as
+// OPENPLUS_EMBED_* (T-402).
+
+func TestAssembleMemoryEnvPathOverride(t *testing.T) {
+	envPath := filepath.Join(t.TempDir(), "env-memory.db")
+	t.Setenv("OPENPLUS_MEMORY_PATH", envPath)
+
+	root := project(t, `{
+  "model": "local/qwen2.5-coder",
+  "provider": {"local": {"options": {"baseURL": "http://localhost:11434/v1"}}},
+  "embedder": {"model": "nomic-embed-text", "baseURL": "http://localhost:11434/v1"},
+  "memory": {"autoOpen": true}
+}`)
+
+	s, err := Assemble(root, Options{})
+	if err != nil {
+		t.Fatalf("Assemble: %v", err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	if s.Memory == nil {
+		t.Fatal("Session.Memory must be non-nil")
+	}
+	// the store must have opened at the env path
+	if _, err := os.Stat(envPath); err != nil {
+		t.Errorf("env path %q not used: %v", envPath, err)
+	}
+	// and NOT at the configured path under <root>/.openplus/memory.db
+	configPath := filepath.Join(root, ".openplus", "memory.db")
+	if _, err := os.Stat(configPath); err == nil {
+		t.Errorf("configured path %q should not exist when env wins", configPath)
+	}
+}
