@@ -176,8 +176,8 @@ func runAndGetExitCode(t *testing.T, cmd *exec.Cmd) int {
 	if err == nil {
 		return 0
 	}
-	var ee *exec.ExitError
-	if !errors.As(err, &ee) {
+	ee, ok := errors.AsType[*exec.ExitError](err)
+	if !ok {
 		t.Fatalf("unexpected error (not ExitError): %v", err)
 	}
 	return ee.ExitCode()

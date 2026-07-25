@@ -169,7 +169,7 @@ func TestWorkflowNoRetriesByDefault(t *testing.T) {
 }
 
 func TestWorkflowCancellationStopsBetweenPhases(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	ran := 0
 	wf := Workflow{Phases: []Phase{
 		phase("first", func(ctx context.Context, st *State) (string, error) {

@@ -92,7 +92,7 @@ func TestBashEmptyCommandErrors(t *testing.T) {
 
 // guard: ensure a context-cancelled error is recognizable by the caller.
 func TestBashCtxErrorIsContext(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	go func() {
 		time.Sleep(30 * time.Millisecond)
 		cancel()

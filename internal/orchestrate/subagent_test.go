@@ -231,7 +231,7 @@ func TestRunAllCancellation(t *testing.T) {
 	iso := &recordingIsolator{}
 	r := Runner{Isolator: iso, MaxParallel: 2}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	tasks := make([]Task, 4)
 	for i := range tasks {
 		tasks[i] = Task{ID: fmt.Sprintf("t%d", i), Run: func(ctx context.Context, dir string) (string, error) {

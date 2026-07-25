@@ -31,25 +31,24 @@ func TestAcquireExclusive(t *testing.T) {
 	s := NewStore(t.TempDir(), 0)
 
 	const N = 20
-	var winners int64
+	var winners atomic.Int64
 	var wg sync.WaitGroup
 	for i := 0; i < N; i++ {
-		wg.Add(1)
-		go func(i int) {
-			defer wg.Done()
+		i := i
+		wg.Go(func() {
 			held, err := s.Acquire(agentName(i), "intent", []string{"f.go::A"})
 			if err != nil {
 				return
 			}
 			if held.Granted {
-				atomic.AddInt64(&winners, 1)
+				winners.Add(1)
 			}
-		}(i)
+		})
 	}
 	wg.Wait()
 
-	if winners != 1 {
-		t.Fatalf("winners = %d, want exactly 1", winners)
+	if w := winners.Load(); w != 1 {
+		t.Fatalf("winners = %d, want exactly 1", w)
 	}
 }
 

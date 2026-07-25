@@ -107,7 +107,7 @@ func TestStdioTransportCloseStopsProcess(t *testing.T) {
 // T-1515: cancelling the context the transport was started with stops the
 // subprocess, so a cancelled session leaves nothing behind.
 func TestStdioTransportContextCancelStopsProcess(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	tr, err := NewStdio(ctx, StdioConfig{Command: buildEchoServer(t)})
 	if err != nil {
 		t.Fatalf("NewStdio: %v", err)

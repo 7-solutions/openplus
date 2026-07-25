@@ -71,10 +71,8 @@ func (r Runner) RunAll(ctx context.Context, tasks []Task) ([]Result, error) {
 	var wg sync.WaitGroup
 
 	for i, task := range tasks {
-		wg.Add(1)
-		go func(i int, task Task) {
-			defer wg.Done()
-
+		i, task := i, task
+		wg.Go(func() {
 			// Acquire a slot, honoring cancellation while queued.
 			select {
 			case gate <- struct{}{}:
@@ -85,7 +83,7 @@ func (r Runner) RunAll(ctx context.Context, tasks []Task) ([]Result, error) {
 			}
 
 			results[i] = r.runOne(ctx, task)
-		}(i, task)
+		})
 	}
 	wg.Wait()
 
