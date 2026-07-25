@@ -52,10 +52,15 @@
 - [x] T-051 BM25 ranking + auto-load threshold; `/skill` explicit invocation.
 
 ## M6 — Context management (ADR-0008)
-- [ ] T-060 Tokenizer port (tiktoken-go + Anthropic heuristic) + calibration tests.
-- [ ] T-061 Budgeter: priority-ordered injection to budget.
-- [ ] T-062 Checkpointer: write checkpoint.md; reconstruct on high-water mark.
-- [ ] T-063 Task tree (T1/T1.1) persisted + restored across checkpoints.
+- [x] T-060 Tokenizer port + per-family calibrated heuristics + calibration tests.
+      **Note:** tiktoken-go is deferred behind the port — it fetches its BPE table
+      from `openaipublic.blob.core.windows.net` at first use, which breaks the
+      local-first guarantee and offline token counting. An exact counter (embedded
+      BPE, or a provider count endpoint) drops in behind `Tokenizer` with no
+      caller changes.
+- [x] T-061 Budgeter: priority-ordered injection to budget.
+- [x] T-062 Checkpointer: write checkpoint.md; reconstruct on high-water mark.
+- [x] T-063 Task tree (T1/T1.1) persisted + restored across checkpoints.
 
 ## M7 — Orchestration (ADR-0006)
 - [ ] T-070 Subagent runner: parallel, cancellable, git-worktree isolation.
