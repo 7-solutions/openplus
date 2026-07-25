@@ -224,8 +224,17 @@ func (s *Session) assembleMemory() error {
 	if !filepath.IsAbs(path) {
 		path = filepath.Join(s.Root, path)
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return fmt.Errorf("runtime: memory dir: %w", err)
+
+	// AutoOpen defaults to false: a missing memory file is a configuration
+	// error, not a silent side effect. Operators opt in via memory.autoOpen.
+	if !s.Config.Memory.AutoOpen {
+		if _, err := os.Stat(path); err != nil {
+			return fmt.Errorf("runtime: memory %q: %w", path, err)
+		}
+	} else {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return fmt.Errorf("runtime: memory dir: %w", err)
+		}
 	}
 
 	store, err := memory.Open(path)

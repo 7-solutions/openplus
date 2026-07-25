@@ -16,7 +16,8 @@ func memProject(t *testing.T) *Session {
 	root := project(t, `{
   "model": "local/qwen2.5-coder",
   "provider": {"local": {"options": {"baseURL": "http://localhost:11434/v1"}}},
-  "embedder": {"model": "nomic-embed-text", "baseURL": "http://localhost:11434/v1"}
+  "embedder": {"model": "nomic-embed-text", "baseURL": "http://localhost:11434/v1"},
+  "memory": {"autoOpen": true}
 }`)
 	s, err := Assemble(root, Options{})
 	if err != nil {

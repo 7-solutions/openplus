@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -298,7 +299,8 @@ func TestAssembleWithEmbedderOpensMemory(t *testing.T) {
 	root := project(t, `{
   "model": "local/qwen2.5-coder",
   "provider": {"local": {"options": {"baseURL": "http://localhost:11434/v1"}}},
-  "embedder": {"model": "nomic-embed-text", "baseURL": "http://localhost:11434/v1"}
+  "embedder": {"model": "nomic-embed-text", "baseURL": "http://localhost:11434/v1"},
+  "memory": {"autoOpen": true}
 }`)
 	s, err := Assemble(root, Options{})
 	if err != nil {
@@ -370,5 +372,61 @@ func TestSessionCloseIsSafeWithoutMemory(t *testing.T) {
 	}
 	if err := s.Close(); err != nil {
 		t.Fatalf("Close without memory: %v", err)
+	}
+}
+
+// --- Change 0004 / T-410: Memory.AutoOpen defaults to false ---
+//
+// Today the runtime auto-creates the memory file via sqlite's create-on-open
+// behavior, so a missing path never errors. After T-412 it must — the file
+// only materializes when the operator opts in via memory.autoOpen: true. The
+// risk (per the proposal) is silent side-effect creation; the fix is to make
+// creation explicit.
+
+func TestAssembleMemoryMissingPathFailsByDefault(t *testing.T) {
+	root := t.TempDir()
+	missing := filepath.Join(root, "nope", "memory.db") // parent does not exist either
+	cfg := fmt.Sprintf(`{
+  "model": "local/qwen2.5-coder",
+  "provider": {"local": {"options": {"baseURL": "http://localhost:11434/v1"}}},
+  "embedder": {"model": "nomic-embed-text", "baseURL": "http://localhost:11434/v1"},
+  "memory": {"path": %q}
+}`, missing)
+	write(t, root, "opencode.json", cfg)
+	write(t, root, "AGENTS.md", "House rule: the build is cgo-free.")
+
+	_, err := Assemble(root, Options{})
+	if err == nil {
+		t.Fatal("expected an error when memory path is missing and autoOpen is unset")
+	}
+	if !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("err = %v, want errors.Is(_, os.ErrNotExist)", err)
+	}
+}
+
+// --- Change 0004 / T-411: Memory.AutoOpen=true creates the file ---
+
+func TestAssembleMemoryAutoOpenCreatesPath(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(root, "fresh", "memory.db") // parent and file both missing
+	cfg := fmt.Sprintf(`{
+  "model": "local/qwen2.5-coder",
+  "provider": {"local": {"options": {"baseURL": "http://localhost:11434/v1"}}},
+  "embedder": {"model": "nomic-embed-text", "baseURL": "http://localhost:11434/v1"},
+  "memory": {"path": %q, "autoOpen": true}
+}`, target)
+	write(t, root, "opencode.json", cfg)
+	write(t, root, "AGENTS.md", "House rule: the build is cgo-free.")
+
+	s, err := Assemble(root, Options{})
+	if err != nil {
+		t.Fatalf("Assemble with autoOpen=true: %v", err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	if s.Memory == nil {
+		t.Fatal("autoOpen=true: Session.Memory must be non-nil")
+	}
+	if _, err := os.Stat(target); err != nil {
+		t.Errorf("autoOpen=true: file should exist at %q: %v", target, err)
 	}
 }

@@ -80,6 +80,23 @@ func (e *Embedder) applyEnvOverrides() {
 type Memory struct {
 	// Path is the database file, relative to the project root when not absolute.
 	Path string
+	// AutoOpen creates the file (and its parent directory) if it does not
+	// exist. Default false: a missing path is a configuration error, not a
+	// silent side effect. Set true in opencode.json to opt in.
+	AutoOpen bool
+	// MaxEntries caps the stored chunks; oldest are pruned first on each
+	// write. Zero means unbounded.
+	MaxEntries int
+}
+
+// applyEnvOverrides layers OPENPLUS_MEMORY_PATH on top of the file value.
+// Same precedence model as the embedder env overrides (T-402): env wins
+// when non-empty, file is the default. Called by Load after the file is
+// parsed.
+func (m *Memory) applyEnvOverrides() {
+	if v := os.Getenv("OPENPLUS_MEMORY_PATH"); v != "" {
+		m.Path = v
+	}
 }
 
 // Context is the context-window configuration (ADR-0008).
@@ -149,13 +166,18 @@ func Load(path string) (*Config, error) {
 			APIKey:  expandEnv(doc.Embedder.APIKey),
 			Timeout: doc.Embedder.Timeout,
 		},
-		Memory: Memory{Path: doc.Memory.Path},
+		Memory: Memory{
+			Path:       doc.Memory.Path,
+			AutoOpen:   doc.Memory.AutoOpen,
+			MaxEntries: doc.Memory.MaxEntries,
+		},
 		Context: Context{
 			Budget: doc.Context.Budget,
 			Window: doc.Context.Window,
 		},
 	}
 	cfg.Embedder.applyEnvOverrides()
+	cfg.Memory.applyEnvOverrides()
 
 	for id, rp := range doc.Provider {
 		cfg.Providers[id] = Provider{
@@ -213,7 +235,9 @@ type rawConfig struct {
 		Timeout time.Duration `json:"timeout"`
 	} `json:"embedder"`
 	Memory struct {
-		Path string `json:"path"`
+		Path       string `json:"path"`
+		AutoOpen   bool   `json:"autoOpen"`
+		MaxEntries int    `json:"maxEntries"`
 	} `json:"memory"`
 	Context struct {
 		Budget int `json:"budget"`
