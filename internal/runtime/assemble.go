@@ -106,6 +106,15 @@ func Assemble(root string, opts Options) (*Session, error) {
 		return nil, fmt.Errorf("runtime: project root %q is not a readable directory", root)
 	}
 
+	// Env overrides apply on top of Options (T-425). Precedence:
+	// env > Options > file. This matches OPENAI_API_KEY-style tools.
+	if v := os.Getenv("OPENPLUS_MODEL"); v != "" {
+		opts.Model = v
+	}
+	if os.Getenv("OPENPLUS_FAKE") == "1" {
+		opts.Fake = true
+	}
+
 	pc, err := config.LoadProjectContextWithConfig(root, opts.ConfigPath)
 	if err != nil {
 		return nil, err

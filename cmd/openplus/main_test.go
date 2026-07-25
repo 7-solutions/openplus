@@ -76,6 +76,39 @@ func TestMainConfigFlagMissing(t *testing.T) {
 	}
 }
 
+// --- Change 0004 / T-424: OPENPLUS_MODEL + OPENPLUS_FAKE=1 env overrides ---
+
+// TestMainEnvModelOverride: OPENPLUS_MODEL=local/foo wins over --model local/bar
+// and the configured model. The fake provider is enabled so no real key is
+// needed; success is exit 0 + the fake's reply.
+func TestMainEnvModelOverride(t *testing.T) {
+	bin := buildOpenplus(t)
+	cmd := exec.Command(bin, "--model", "local/flag-model", "--fake", "-p", "say hello", "-C", t.TempDir())
+	cmd.Env = append(os.Environ(), "OPENPLUS_MODEL=local/env-model")
+	stdout, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("OPENPLUS_MODEL run failed: %v\n%s", err, stdout)
+	}
+	if !strings.Contains(string(stdout), "openplus runtime is wired") {
+		t.Errorf("stdout = %q, want fake-provider reply", stdout)
+	}
+}
+
+// TestMainEnvFakeOverride: OPENPLUS_FAKE=1 enables the fake provider without
+// --fake on the command line.
+func TestMainEnvFakeOverride(t *testing.T) {
+	bin := buildOpenplus(t)
+	cmd := exec.Command(bin, "-p", "say hello", "-C", t.TempDir())
+	cmd.Env = append(os.Environ(), "OPENPLUS_FAKE=1")
+	stdout, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("OPENPLUS_FAKE=1 run failed: %v\n%s", err, stdout)
+	}
+	if !strings.Contains(string(stdout), "openplus runtime is wired") {
+		t.Errorf("stdout = %q, want fake-provider reply (env should enable --fake)", stdout)
+	}
+}
+
 // buildOpenplus compiles the binary into a temp dir and returns its path.
 // t.Cleanup removes the file when the test ends.
 func buildOpenplus(t *testing.T) string {

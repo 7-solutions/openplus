@@ -480,6 +480,45 @@ func TestAssembleConfigPathMissingErrors(t *testing.T) {
 	}
 }
 //
+// --- Change 0004 / T-424: env overrides on Model + Fake ---
+
+// TestAssembleEnvModelOverridesOptions: OPENPLUS_MODEL wins over Options.Model.
+// In-process test of the seam; the cmd surface wires the same env into the
+// runtime via os.Getenv inside Assemble.
+func TestAssembleEnvModelOverridesOptions(t *testing.T) {
+	t.Setenv("OPENPLUS_MODEL", "local/env-model")
+	root := project(t, `{
+  "model": "local/file-model",
+  "provider": {"local": {"options": {"baseURL": "http://localhost:11434/v1"}}}
+}`)
+	s, err := Assemble(root, Options{Model: "local/flag-model"})
+	if err != nil {
+		t.Fatalf("Assemble: %v", err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	if s.Model != "local/env-model" {
+		t.Errorf("Model = %q, want local/env-model (env wins over flag)", s.Model)
+	}
+}
+
+// TestAssembleEnvFakeOverridesFalse: OPENPLUS_FAKE=1 turns the fake provider on
+// even when --fake isn't passed.
+func TestAssembleEnvFakeOverridesFalse(t *testing.T) {
+	t.Setenv("OPENPLUS_FAKE", "1")
+	root := project(t, `{
+  "model": "local/should-not-be-used",
+  "provider": {"local": {"options": {"baseURL": "http://localhost:11434/v1"}}}
+}`)
+	s, err := Assemble(root, Options{})
+	if err != nil {
+		t.Fatalf("Assemble: %v", err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	if _, ok := s.Provider.(*provider.Fake); !ok {
+		t.Fatalf("Provider = %T, want *provider.Fake (OPENPLUS_FAKE=1 must win)", s.Provider)
+	}
+}
+
 // Env wins over opencode.json's memory.path. The store must open at the
 // env path; the file value is irrelevant. Same precedence model as
 // OPENPLUS_EMBED_* (T-402).
