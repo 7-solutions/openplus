@@ -23,7 +23,7 @@ Anthropic Messages API and the OpenAI-compatible endpoint as first-class citizen
 
 ## Architecture (ports & adapters — hexagonal)
 Ports: Provider · Embedder · MemoryStore · Tool · SkillIndex · Tokenizer · Budgeter ·
-Checkpointer · PolicyGate · Workflow. Layout is in
+Checkpointer · PolicyGate · Workflow · LanguageService. Layout is in
 `openspec/changes/0001-foundation/design.md`.
 
 ## Decisions (ADRs — read before touching a subsystem)
@@ -37,12 +37,20 @@ Checkpointer · PolicyGate · Workflow. Layout is in
 - ADR-0008 context budgeter / tokenizer / reconstruction
 - ADR-0009 JS workflow adapter — goja trigger fired (behind the Workflow port)
 - ADR-0016 Context7 as the default docs MCP source (auto-inject-if-empty; change 0025)
+- ADR-0017 LanguageService port — LSP behind the eleventh seam (opt-in; change 0026)
 
 ## Hard rules
 - **Pure Go / cgo-free.** No cgo in the default build (that is why ncruces+wazero, not
   mattn+cgo). Single static binary; trivial cross-compile.
 - **Provider neutrality.** The loop and all subsystems use only the neutral model.
   No provider-specific type escapes `internal/provider`.
+- **Wire neutrality at every port — no wire type crosses a seam.** A port's
+  interface and its result types are expressed in neutral types only; the adapter
+  converts at its own boundary. Applied to LSP (change 0026): no `go.lsp.dev` type
+  may appear in `internal/ports/`, and only `internal/lsp/` may import one — the
+  regression test `internal/ports/lsp_leak_guard_test.go` fails the build if either
+  is violated. This is ADR-0005's provider rule generalized: the core must not learn
+  a second wire protocol any more than it learned the first.
 - **Core depends on ports, not on adapters — at the package level.** After change
   0018, `internal/ports/` is the canonical home of every port's interface AND its
   neutral types. Concrete adapters (Anthropic, OpenAI-compatible, prefix-select,

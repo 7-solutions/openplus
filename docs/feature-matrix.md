@@ -35,7 +35,9 @@
 | Worktree isolation | yes | yes (compose) | yes change 0012 |
 | MCP connection | yes | yes | yes change 0015 |
 | MCP marketplace/install | yes | ? | no deferred |
-| LSP integration | yes auto-load | yes | no not shipped |
+| LSP integration | yes auto-load | yes (diagnostics) | yes opt-in (change 0026) |
+| LSP surfaces | diagnostics | diagnostics | **diagnostics + hover + definition + symbols + references** |
+| Diagnostics auto-fed to model | ? | ? | yes, async after edits (bounded) |
 | Skills system | ? | yes 20+ builtin | yes `/skills` + spec-driven |
 
 ## Memory / context
@@ -74,7 +76,8 @@
 
 | Trait | OpenPlus |
 |---|---|
-| Hexagonal ports/adapters | yes 10 ports, enforced by `leak_guard_test.go` |
+| Hexagonal ports/adapters | yes 11 ports, enforced by `leak_guard_test.go` |
+| Wire neutrality at every port | yes, enforced by `lsp_leak_guard_test.go` (no `go.lsp.dev` type crosses a seam) |
 | Provider-neutrality hard rule | yes regression-guarded |
 | Every hard rule -> failing test | yes house rule |
 | Spec-first (OpenSpec) gate | yes mandatory, STOP for approval |
@@ -83,13 +86,18 @@
 
 ## Gaps vs the other two (OpenPlus not-yet)
 
-1. **LSP** — neither auto-load nor diagnostics. Biggest functional gap.
-2. **OAuth provider login** (Copilot/ChatGPT/Codex) — API-key only.
-3. **Bundled free models** — no Zen/MiMo-Auto equivalent.
+1. **OAuth provider login** (Copilot/ChatGPT/Codex) — API-key only.
+2. **Bundled free models** — no Zen/MiMo-Auto equivalent.
+3. **LSP server auto-install / auto-detect** — OpenPlus requires the server command
+   in config; OpenCode auto-loads by extension. The user supplies the binary; OpenPlus
+   never downloads a toolchain.
 4. **Marketplace, web/share UI, desktop, voice** — all explicitly deferred behind ADR triggers.
+
+Closed since the first snapshot: **LSP** (change 0026) — now the broadest surface of
+the three, and the only one that feeds diagnostics back to the model automatically.
 
 ## Bottom line
 
-- **OpenPlus** = OpenCode config surface + MiMoCode feature milestone (memory, workflows, max mode, dream/distill, goal judge), in **pure Go**, with **strict ports/adapters + spec-first discipline** the others lack. Trails on **LSP, OAuth login, bundled models, desktop/voice**.
+- **OpenPlus** = OpenCode config surface + MiMoCode feature milestone (memory, workflows, max mode, dream/distill, goal judge), in **pure Go**, with **strict ports/adapters + spec-first discipline** the others lack. Now leads on **LSP surface** (five surfaces vs diagnostics-only, plus automatic diagnostics injection). Trails on **OAuth login, bundled models, LSP auto-detect, desktop/voice**.
 - **OpenCode** leads on breadth (75+ providers, LSP, desktop, share, marketplace) and distribution.
 - **MiMoCode** leads on agentic depth (200+ step workflows, voice, evolve, bundled MiMo Auto free tier).

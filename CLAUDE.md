@@ -8,6 +8,10 @@ the stack, the build gate, the ports, the ADR index, the hard rules, and the def
   is the canonical home of every port's interface AND its neutral types; concrete
   adapters live in `internal/provider/`. No core package may import `internal/provider/`.
   The regression test `internal/ports/leak_guard_test.go` fails the build if it does.
+- **Wire neutrality at every port — no wire type crosses a seam.** A port's interface
+  and its result types use neutral types only; the adapter converts at its boundary.
+  For LSP: no `go.lsp.dev` type in `internal/ports/`, and only `internal/lsp/` may
+  import one. Enforced by `internal/ports/lsp_leak_guard_test.go`.
 - **Every hard rule arrives with a regression test.** When adding a rule to AGENTS.md,
   add a failing test in the same slice.
 
@@ -18,4 +22,4 @@ the stack, the build gate, the ports, the ADR index, the hard rules, and the def
 - A SWE-Bench-style evaluation workflow (single problem, hidden test suite,
   scored patch) is packaged as a separate skill: `.claude/skills/swe-loop/SKILL.md`.
   Use it when the task is benchmark-style, not shipped-feature work.
-- ADRs: `docs/adr/`. Specs: `openspec/specs/`. Most recent change: `openspec/changes/0018-provider-port-extraction/`.
+- ADRs: `docs/adr/`. Specs: `openspec/specs/`. Most recent change: `openspec/changes/0026-language-service-port/`.
