@@ -31,6 +31,44 @@ type Config struct {
 
 	// Permission is the parsed permission ruleset (ADR-0007).
 	Permission Permission
+
+	// Embedder configures the embedding model used for memory (ADR-0004).
+	// Absent means memory is disabled.
+	Embedder Embedder
+
+	// Memory configures the on-disk memory store (ADR-0003).
+	Memory Memory
+
+	// Context configures the token budget and window (ADR-0008).
+	Context Context
+}
+
+// Embedder is the embedding-model configuration. Memory is only enabled when
+// Configured reports true.
+type Embedder struct {
+	Model   string
+	BaseURL string
+	APIKey  string
+}
+
+// Configured reports whether enough is set to embed. A model is required: it
+// names the vector space, and a store built against the wrong one is worse than
+// no store at all.
+func (e Embedder) Configured() bool { return e.Model != "" }
+
+// Memory is the memory-store configuration.
+type Memory struct {
+	// Path is the database file, relative to the project root when not absolute.
+	Path string
+}
+
+// Context is the context-window configuration (ADR-0008).
+type Context struct {
+	// Budget is the soft token ceiling for assembled context.
+	Budget int
+	// Window is the model's full context window, used for the checkpoint
+	// high-water mark.
+	Window int
 }
 
 // Provider is one configured model backend.
@@ -85,6 +123,16 @@ func Load(path string) (*Config, error) {
 		Model:        doc.Model,
 		Providers:    make(map[string]Provider, len(doc.Provider)),
 		Permission:   parsePermission(doc.Permission),
+		Embedder: Embedder{
+			Model:   doc.Embedder.Model,
+			BaseURL: expandEnv(doc.Embedder.BaseURL),
+			APIKey:  expandEnv(doc.Embedder.APIKey),
+		},
+		Memory: Memory{Path: doc.Memory.Path},
+		Context: Context{
+			Budget: doc.Context.Budget,
+			Window: doc.Context.Window,
+		},
 	}
 
 	for id, rp := range doc.Provider {
@@ -136,6 +184,18 @@ type rawConfig struct {
 	Model        string                     `json:"model"`
 	Provider     map[string]rawProvider     `json:"provider"`
 	Permission   map[string]json.RawMessage `json:"permission"`
+	Embedder     struct {
+		Model   string `json:"model"`
+		BaseURL string `json:"baseURL"`
+		APIKey  string `json:"apiKey"`
+	} `json:"embedder"`
+	Memory struct {
+		Path string `json:"path"`
+	} `json:"memory"`
+	Context struct {
+		Budget int `json:"budget"`
+		Window int `json:"window"`
+	} `json:"context"`
 }
 
 type rawProvider struct {
