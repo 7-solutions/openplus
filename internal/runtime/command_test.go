@@ -5,17 +5,17 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/7solutions/openplus/internal/provider"
+	"github.com/7solutions/openplus/internal/ports"
 )
 
 // countingProvider records how many times a turn reached the model, so a test
 // can prove a command cost no round-trip.
 type countingProvider struct{ calls int }
 
-func (c *countingProvider) Stream(context.Context, provider.Request) (<-chan provider.Event, error) {
+func (c *countingProvider) Stream(context.Context, ports.Request) (<-chan ports.Event, error) {
 	c.calls++
-	ch := make(chan provider.Event, 1)
-	ch <- provider.Event{Kind: provider.EventTurnEnd}
+	ch := make(chan ports.Event, 1)
+	ch <- ports.Event{Kind: ports.EventTurnEnd}
 	close(ch)
 	return ch, nil
 }

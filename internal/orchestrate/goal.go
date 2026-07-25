@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/7solutions/openplus/internal/provider"
+	"github.com/7solutions/openplus/internal/ports"
 )
 
 // errJudgeBoom is a sentinel used by tests to drive the provider-error path.
@@ -39,7 +39,7 @@ type Verdict struct {
 // the judge before it is allowed to stop.
 type Judge struct {
 	// Provider is the judge's model backend — independent of the agent's.
-	Provider provider.Provider
+	Provider ports.Provider
 	// Model is the judge model id ("<provider>/<model>").
 	Model string
 }
@@ -47,7 +47,7 @@ type Judge struct {
 // Evaluate asks the judge whether goal is satisfied by the work in history.
 // An empty goal means no stop condition is configured, so stopping is always
 // allowed and the judge is not consulted.
-func (j Judge) Evaluate(ctx context.Context, goal string, history []provider.Message) (Verdict, error) {
+func (j Judge) Evaluate(ctx context.Context, goal string, history []ports.Message) (Verdict, error) {
 	if strings.TrimSpace(goal) == "" {
 		return Verdict{Met: true}, nil
 	}
@@ -55,13 +55,13 @@ func (j Judge) Evaluate(ctx context.Context, goal string, history []provider.Mes
 		return Verdict{}, fmt.Errorf("orchestrate: judge has no provider configured")
 	}
 
-	req := provider.Request{
+	req := ports.Request{
 		Model:  j.Model,
 		System: judgeSystemPrompt,
-		Messages: []provider.Message{{
-			Role: provider.RoleUser,
-			Blocks: []provider.Block{{
-				Kind: provider.BlockText,
+		Messages: []ports.Message{{
+			Role: ports.RoleUser,
+			Blocks: []ports.Block{{
+				Kind: ports.BlockText,
 				Text: fmt.Sprintf("GOAL:\n%s\n\nTRANSCRIPT:\n%s", goal, flattenHistory(history)),
 			}},
 		}},
@@ -76,9 +76,9 @@ func (j Judge) Evaluate(ctx context.Context, goal string, history []provider.Mes
 	var reply strings.Builder
 	for ev := range events {
 		switch ev.Kind {
-		case provider.EventTextDelta:
+		case ports.EventTextDelta:
 			reply.WriteString(ev.Text)
-		case provider.EventError:
+		case ports.EventError:
 			return Verdict{}, fmt.Errorf("orchestrate: judge: %w", ev.Err)
 		}
 	}
@@ -112,16 +112,16 @@ func stripPrefix(s string, n int) string {
 }
 
 // flattenHistory renders a message history as a plain transcript for the judge.
-func flattenHistory(msgs []provider.Message) string {
+func flattenHistory(msgs []ports.Message) string {
 	var b strings.Builder
 	for _, m := range msgs {
 		for _, blk := range m.Blocks {
 			switch blk.Kind {
-			case provider.BlockText, provider.BlockThinking:
+			case ports.BlockText, ports.BlockThinking:
 				fmt.Fprintf(&b, "%s: %s\n", m.Role, blk.Text)
-			case provider.BlockToolCall:
+			case ports.BlockToolCall:
 				fmt.Fprintf(&b, "%s: called %s(%s)\n", m.Role, blk.ToolName, blk.ToolInput)
-			case provider.BlockToolResult:
+			case ports.BlockToolResult:
 				fmt.Fprintf(&b, "tool result: %s\n", blk.ToolResultText)
 			}
 		}

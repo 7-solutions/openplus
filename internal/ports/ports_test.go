@@ -4,15 +4,13 @@ import (
 	"context"
 	"testing"
 	"time"
-
-	"github.com/7solutions/openplus/internal/provider"
 )
 
 // TestAllTenPortsAreDeclared is the T-004 acceptance test: every port named in
 // the design has a compile-time assertion below, so removing or breaking one
 // fails the build rather than drifting silently.
 func TestAllTenPortsAreDeclared(t *testing.T) {
-	// The assertions live at package scope (see the var block in ports.go's
+	// The assertions live at package scope (see the var block in go's
 	// companion fakes); reaching this point means they all compiled.
 	names := PortNames()
 	if len(names) != 10 {
@@ -36,15 +34,15 @@ func TestAllTenPortsAreDeclared(t *testing.T) {
 
 func TestFakeProviderStreams(t *testing.T) {
 	var p Provider = FakeProvider{}
-	events, err := p.Stream(context.Background(), provider.Request{})
+	events, err := p.Stream(context.Background(), Request{})
 	if err != nil {
 		t.Fatalf("Stream: %v", err)
 	}
-	var kinds []provider.EventKind
+	var kinds []EventKind
 	for ev := range events {
 		kinds = append(kinds, ev.Kind)
 	}
-	if len(kinds) != 1 || kinds[0] != provider.EventTurnEnd {
+	if len(kinds) != 1 || kinds[0] != EventTurnEnd {
 		t.Fatalf("fake provider events = %v, want a single TurnEnd", kinds)
 	}
 }
@@ -142,7 +140,7 @@ func TestFakeTokenizerCounts(t *testing.T) {
 
 func TestFakeBudgeterPassesThrough(t *testing.T) {
 	var b Budgeter = FakeBudgeter{}
-	msgs := []provider.Message{{Role: provider.RoleUser}}
+	msgs := []Message{{Role: RoleUser}}
 	got := b.Fit(1, msgs)
 	if len(got) != len(msgs) {
 		t.Fatalf("Fit dropped messages: %d -> %d", len(msgs), len(got))
@@ -168,7 +166,7 @@ func TestFakeCheckpointerRoundTrips(t *testing.T) {
 
 func TestFakePolicyGateAllows(t *testing.T) {
 	var g PolicyGate = FakePolicyGate{}
-	ok, err := g.Permit(context.Background(), provider.ToolCall{Name: "bash"})
+	ok, err := g.Permit(context.Background(), ToolCall{Name: "bash"})
 	if err != nil {
 		t.Fatalf("Permit: %v", err)
 	}
@@ -179,7 +177,7 @@ func TestFakePolicyGateAllows(t *testing.T) {
 
 func TestFakePolicyGateDenyMode(t *testing.T) {
 	var g PolicyGate = FakePolicyGate{DenyAll: true}
-	ok, _ := g.Permit(context.Background(), provider.ToolCall{Name: "bash"})
+	ok, _ := g.Permit(context.Background(), ToolCall{Name: "bash"})
 	if ok {
 		t.Error("DenyAll fake should refuse")
 	}
@@ -196,7 +194,7 @@ func TestFakeWorkflowRuns(t *testing.T) {
 }
 
 func TestFakeWorkflowRespectsCancellation(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	var w Workflow = FakeWorkflow{PhaseNames: []string{"a"}}
 	if err := w.Run(ctx); err == nil {

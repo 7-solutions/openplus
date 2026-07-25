@@ -14,7 +14,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/7solutions/openplus/internal/provider"
+	"github.com/7solutions/openplus/internal/ports"
 	"github.com/7solutions/openplus/internal/provider/anthropic"
 	"github.com/7solutions/openplus/internal/provider/openaicompat"
 )
@@ -22,16 +22,16 @@ import (
 // sharedRequest is the single neutral Request every adapter must accept. Its
 // model prefix is irrelevant (each adapter strips its own); what matters is the
 // neutral shape: system, one user text turn, one tool schema.
-func sharedRequest() provider.Request {
-	return provider.Request{
+func sharedRequest() ports.Request {
+	return ports.Request{
 		Model:  "neutral/model", // adapters strip any "<prefix>/"
 		System: "you are a contract-test assistant",
-		Messages: []provider.Message{
-			{Role: provider.RoleUser, Blocks: []provider.Block{
-				{Kind: provider.BlockText, Text: "say hello then call echo"},
+		Messages: []ports.Message{
+			{Role: ports.RoleUser, Blocks: []ports.Block{
+				{Kind: ports.BlockText, Text: "say hello then call echo"},
 			}},
 		},
-		Tools: []provider.ToolSchema{{
+		Tools: []ports.ToolSchema{{
 			Name:        "echo",
 			Description: "echo the text back",
 			InputSchema: []byte(`{"type":"object","properties":{"text":{"type":"string"}},"required":["text"]}`),
@@ -101,7 +101,7 @@ data: [DONE]
 
 type adapterCase struct {
 	name      string
-	newAd     func(baseURL string) provider.Provider
+	newAd     func(baseURL string) ports.Provider
 	nativeSSE string
 	// wireCheck asserts protocol-specific correctness of the recorded body.
 	wireCheck func(t *testing.T, body map[string]any)
@@ -111,7 +111,7 @@ func adapterCases() []adapterCase {
 	return []adapterCase{
 		{
 			name:      "anthropic",
-			newAd:     func(u string) provider.Provider { return &anthropic.Adapter{BaseURL: u, APIKey: "k"} },
+			newAd:     func(u string) ports.Provider { return &anthropic.Adapter{BaseURL: u, APIKey: "k"} },
 			nativeSSE: anthropicSSE,
 			wireCheck: func(t *testing.T, body map[string]any) {
 				if body["system"] != "you are a contract-test assistant" {
@@ -129,7 +129,7 @@ func adapterCases() []adapterCase {
 		},
 		{
 			name:      "openaicompat",
-			newAd:     func(u string) provider.Provider { return &openaicompat.Adapter{BaseURL: u, APIKey: "k"} },
+			newAd:     func(u string) ports.Provider { return &openaicompat.Adapter{BaseURL: u, APIKey: "k"} },
 			nativeSSE: openaiSSE,
 			wireCheck: func(t *testing.T, body map[string]any) {
 				// system becomes the first message with role "system"
@@ -150,17 +150,17 @@ func adapterCases() []adapterCase {
 }
 
 // drain collects a stream into neutral text and completed ToolCalls.
-func drain(t *testing.T, events <-chan provider.Event) (text string, calls []provider.ToolCall) {
+func drain(t *testing.T, events <-chan ports.Event) (text string, calls []ports.ToolCall) {
 	t.Helper()
 	for ev := range events {
 		switch ev.Kind {
-		case provider.EventTextDelta:
+		case ports.EventTextDelta:
 			text += ev.Text
-		case provider.EventToolCallStart:
+		case ports.EventToolCallStart:
 			if ev.Call != nil {
 				calls = append(calls, *ev.Call)
 			}
-		case provider.EventError:
+		case ports.EventError:
 			t.Fatalf("error event: %v", ev.Err)
 		}
 	}
@@ -192,7 +192,7 @@ func TestContractRoundTrip(t *testing.T) {
 
 			c.wireCheck(t, body)
 
-			// Contract: identical neutral output regardless of provider.
+			// Contract: identical neutral output regardless of ports.
 			if text != expectedText {
 				t.Errorf("text = %q, want %q", text, expectedText)
 			}
@@ -275,14 +275,14 @@ func TestContractNeutralOutputIsEqualAcrossAdapters(t *testing.T) {
 // tool_result blocks; openai tool_calls + role:tool message). The neutral
 // history is identical; only the wire representation differs.
 func TestContractRoundTripToolResult(t *testing.T) {
-	req := provider.Request{
+	req := ports.Request{
 		Model: "neutral/model",
-		Messages: []provider.Message{
-			{Role: provider.RoleAssistant, Blocks: []provider.Block{
-				{Kind: provider.BlockToolCall, ToolCallID: "call_1", ToolName: "echo", ToolInput: []byte(`{"text":"hi"}`)},
+		Messages: []ports.Message{
+			{Role: ports.RoleAssistant, Blocks: []ports.Block{
+				{Kind: ports.BlockToolCall, ToolCallID: "call_1", ToolName: "echo", ToolInput: []byte(`{"text":"hi"}`)},
 			}},
-			{Role: provider.RoleUser, Blocks: []provider.Block{
-				{Kind: provider.BlockToolResult, ToolResultForID: "call_1", ToolResultText: "hi"},
+			{Role: ports.RoleUser, Blocks: []ports.Block{
+				{Kind: ports.BlockToolResult, ToolResultForID: "call_1", ToolResultText: "hi"},
 			}},
 		},
 	}
@@ -302,13 +302,13 @@ data: [DONE]
 
 	for _, c := range []struct {
 		name  string
-		newAd func(string) provider.Provider
+		newAd func(string) ports.Provider
 		sse   string
 		check func(*testing.T, map[string]any)
 	}{
 		{
 			name:  "anthropic",
-			newAd: func(u string) provider.Provider { return &anthropic.Adapter{BaseURL: u, APIKey: "k"} },
+			newAd: func(u string) ports.Provider { return &anthropic.Adapter{BaseURL: u, APIKey: "k"} },
 			sse:   anthropicEnd,
 			check: func(t *testing.T, body map[string]any) {
 				msgs, _ := body["messages"].([]any)
@@ -333,7 +333,7 @@ data: [DONE]
 		},
 		{
 			name:  "openaicompat",
-			newAd: func(u string) provider.Provider { return &openaicompat.Adapter{BaseURL: u, APIKey: "k"} },
+			newAd: func(u string) ports.Provider { return &openaicompat.Adapter{BaseURL: u, APIKey: "k"} },
 			sse:   openaiEnd,
 			check: func(t *testing.T, body map[string]any) {
 				msgs, _ := body["messages"].([]any)

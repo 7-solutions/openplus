@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/7solutions/openplus/internal/orchestrate"
-	"github.com/7solutions/openplus/internal/provider"
+	"github.com/7solutions/openplus/internal/ports"
 )
 
 // --- T-1110: promptPhase ---
@@ -203,7 +203,7 @@ type promptRecorder struct {
 	prompts []string
 }
 
-func (p *promptRecorder) Stream(_ context.Context, req provider.Request) (<-chan provider.Event, error) {
+func (p *promptRecorder) Stream(_ context.Context, req ports.Request) (<-chan ports.Event, error) {
 	for _, m := range req.Messages {
 		for _, b := range m.Blocks {
 			if b.Text != "" {
@@ -211,9 +211,9 @@ func (p *promptRecorder) Stream(_ context.Context, req provider.Request) (<-chan
 			}
 		}
 	}
-	ch := make(chan provider.Event, 2)
-	ch <- provider.Event{Kind: provider.EventTextDelta, Text: p.reply}
-	ch <- provider.Event{Kind: provider.EventTurnEnd}
+	ch := make(chan ports.Event, 2)
+	ch <- ports.Event{Kind: ports.EventTextDelta, Text: p.reply}
+	ch <- ports.Event{Kind: ports.EventTurnEnd}
 	close(ch)
 	return ch, nil
 }

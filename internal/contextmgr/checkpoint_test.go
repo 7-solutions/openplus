@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/7solutions/openplus/internal/provider"
+	"github.com/7solutions/openplus/internal/ports"
 )
 
 func TestCheckpointerShouldCheckpointHighWaterMark(t *testing.T) {
@@ -49,7 +49,7 @@ func TestCheckpointerWriteCreatesFile(t *testing.T) {
 	cp := Checkpoint{
 		Summary: "did the first half of the work",
 		Tasks:   tree,
-		Recent:  []provider.Message{userMsg("last thing said")},
+		Recent:  []ports.Message{userMsg("last thing said")},
 	}
 	if err := c.Write(cp); err != nil {
 		t.Fatalf("Write: %v", err)
@@ -80,7 +80,7 @@ func TestCheckpointerRoundTrip(t *testing.T) {
 	orig := Checkpoint{
 		Summary: "reconstruction should restore this summary",
 		Tasks:   tree,
-		Recent:  []provider.Message{userMsg("keep me")},
+		Recent:  []ports.Message{userMsg("keep me")},
 	}
 	if err := c.Write(orig); err != nil {
 		t.Fatalf("Write: %v", err)

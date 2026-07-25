@@ -9,7 +9,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/7solutions/openplus/internal/provider"
+	"github.com/7solutions/openplus/internal/ports"
 )
 
 func TestPrompterAskApproved(t *testing.T) {
@@ -24,7 +24,7 @@ func TestPrompterAskApproved(t *testing.T) {
 		mu.Unlock()
 	}, answer)
 
-	call := provider.ToolCall{ID: "c1", Name: "bash", Input: []byte(`{"command":"rm -rf x"}`)}
+	call := ports.ToolCall{ID: "c1", Name: "bash", Input: []byte(`{"command":"rm -rf x"}`)}
 	type res struct {
 		ok  bool
 		err error
@@ -52,7 +52,7 @@ func TestPrompterAskDenied(t *testing.T) {
 	answer := make(chan bool, 1)
 	p := NewPrompter(SendNoOp(), answer)
 	resCh := make(chan bool, 1)
-	go func() { ok, _ := p.Ask(context.Background(), provider.ToolCall{}); resCh <- ok }()
+	go func() { ok, _ := p.Ask(context.Background(), ports.ToolCall{}); resCh <- ok }()
 	time.Sleep(20 * time.Millisecond)
 	answer <- false
 	if ok := <-resCh; ok {
@@ -65,7 +65,7 @@ func TestPrompterAskCtxTimeout(t *testing.T) {
 	p := NewPrompter(SendNoOp(), answer)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
 	defer cancel()
-	ok, err := p.Ask(ctx, provider.ToolCall{})
+	ok, err := p.Ask(ctx, ports.ToolCall{})
 	if ok || err == nil || !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("Ask = (%v,%v), want (false, DeadlineExceeded)", ok, err)
 	}

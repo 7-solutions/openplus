@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/7solutions/openplus/internal/contextmgr"
-	"github.com/7solutions/openplus/internal/provider"
+	"github.com/7solutions/openplus/internal/ports"
 )
 
 // fakeSession assembles a session on the fake provider with a given window, so
@@ -240,10 +240,10 @@ func TestRunFailedWriteLeavesHistoryUntouched(t *testing.T) {
 // --- T-823: summary is verbatim, capped, visibly truncated ---
 
 func TestCheckpointSummaryVerbatimWhenShort(t *testing.T) {
-	history := []provider.Message{
+	history := []ports.Message{
 		userMessage("first thing said"),
-		{Role: provider.RoleAssistant, Blocks: []provider.Block{
-			{Kind: provider.BlockText, Text: "second thing said"},
+		{Role: ports.RoleAssistant, Blocks: []ports.Block{
+			{Kind: ports.BlockText, Text: "second thing said"},
 		}},
 	}
 	got := buildSummary(history)
@@ -260,7 +260,7 @@ func TestCheckpointSummaryVerbatimWhenShort(t *testing.T) {
 func TestCheckpointSummaryTruncatesVisiblyAtBoundary(t *testing.T) {
 	// Each message is large enough that only the last few fit under the cap.
 	big := strings.Repeat("x", SummaryCap/3)
-	var history []provider.Message
+	var history []ports.Message
 	for i, tag := range []string{"OLDEST", "MIDDLE", "NEWEST"} {
 		_ = i
 		history = append(history, userMessage(tag+" "+big))

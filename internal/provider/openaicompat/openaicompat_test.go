@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/7solutions/openplus/internal/provider"
+	"github.com/7solutions/openplus/internal/ports"
 )
 
 // recordedSSE is a canned Chat Completions stream: an assistant text delta
@@ -51,15 +51,15 @@ func TestStreamParsesTextAndToolCall(t *testing.T) {
 	srv, _ := startFixtureServer(t)
 	a := &Adapter{BaseURL: srv.URL, APIKey: "sk-test"}
 
-	req := provider.Request{
+	req := ports.Request{
 		Model:  "openai/gpt-4o-mini",
 		System: "helpful",
-		Messages: []provider.Message{
-			{Role: provider.RoleUser, Blocks: []provider.Block{
-				{Kind: provider.BlockText, Text: "hi"},
+		Messages: []ports.Message{
+			{Role: ports.RoleUser, Blocks: []ports.Block{
+				{Kind: ports.BlockText, Text: "hi"},
 			}},
 		},
-		Tools: []provider.ToolSchema{{
+		Tools: []ports.ToolSchema{{
 			Name:        "echo",
 			Description: "echo",
 			InputSchema: []byte(`{"type":"object","properties":{"text":{"type":"string"}}}`),
@@ -71,22 +71,22 @@ func TestStreamParsesTextAndToolCall(t *testing.T) {
 	}
 
 	var textDeltas []string
-	var calls []provider.ToolCall
-	var usage *provider.Usage
+	var calls []ports.ToolCall
+	var usage *ports.Usage
 	sawTurnEnd := false
 	for ev := range events {
 		switch ev.Kind {
-		case provider.EventTextDelta:
+		case ports.EventTextDelta:
 			textDeltas = append(textDeltas, ev.Text)
-		case provider.EventToolCallStart:
+		case ports.EventToolCallStart:
 			if ev.Call != nil {
 				calls = append(calls, *ev.Call)
 			}
-		case provider.EventUsage:
+		case ports.EventUsage:
 			usage = ev.Usage
-		case provider.EventTurnEnd:
+		case ports.EventTurnEnd:
 			sawTurnEnd = true
-		case provider.EventError:
+		case ports.EventError:
 			t.Fatalf("error event: %v", ev.Err)
 		}
 	}
@@ -115,15 +115,15 @@ func TestStreamSendsWireShape(t *testing.T) {
 	srv, got := startFixtureServer(t)
 	a := &Adapter{BaseURL: srv.URL, APIKey: "sk-test"}
 
-	req := provider.Request{
+	req := ports.Request{
 		Model:  "gpt-4o-mini",
 		System: "helpful",
-		Messages: []provider.Message{
-			{Role: provider.RoleUser, Blocks: []provider.Block{
-				{Kind: provider.BlockText, Text: "hello"},
+		Messages: []ports.Message{
+			{Role: ports.RoleUser, Blocks: []ports.Block{
+				{Kind: ports.BlockText, Text: "hello"},
 			}},
 		},
-		Tools: []provider.ToolSchema{{
+		Tools: []ports.ToolSchema{{
 			Name:        "echo",
 			Description: "echo",
 			InputSchema: []byte(`{"type":"object"}`),
@@ -163,7 +163,7 @@ func TestStreamSendsWireShape(t *testing.T) {
 func TestStreamRequestsUsageInStream(t *testing.T) {
 	srv, got := startFixtureServer(t)
 	a := &Adapter{BaseURL: srv.URL, APIKey: "k"}
-	if _, err := a.Stream(context.Background(), provider.Request{Model: "gpt-4o-mini"}); err != nil {
+	if _, err := a.Stream(context.Background(), ports.Request{Model: "gpt-4o-mini"}); err != nil {
 		t.Fatalf("Stream: %v", err)
 	}
 	so, ok := (*got)["stream_options"].(map[string]any)
@@ -179,11 +179,11 @@ func TestStreamAssistantToolCallMarshaled(t *testing.T) {
 	srv, got := startFixtureServer(t)
 	a := &Adapter{BaseURL: srv.URL, APIKey: "k"}
 
-	req := provider.Request{
+	req := ports.Request{
 		Model: "gpt-4o-mini",
-		Messages: []provider.Message{
-			{Role: provider.RoleAssistant, Blocks: []provider.Block{
-				{Kind: provider.BlockToolCall, ToolCallID: "call_1", ToolName: "echo", ToolInput: []byte(`{"text":"hi"}`)},
+		Messages: []ports.Message{
+			{Role: ports.RoleAssistant, Blocks: []ports.Block{
+				{Kind: ports.BlockToolCall, ToolCallID: "call_1", ToolName: "echo", ToolInput: []byte(`{"text":"hi"}`)},
 			}},
 		},
 	}
@@ -218,14 +218,14 @@ func TestStreamToolResultMappedToToolRole(t *testing.T) {
 	srv, got := startFixtureServer(t)
 	a := &Adapter{BaseURL: srv.URL, APIKey: "k"}
 
-	req := provider.Request{
+	req := ports.Request{
 		Model: "gpt-4o-mini",
-		Messages: []provider.Message{
-			{Role: provider.RoleAssistant, Blocks: []provider.Block{
-				{Kind: provider.BlockToolCall, ToolCallID: "call_1", ToolName: "echo", ToolInput: []byte(`{}`)},
+		Messages: []ports.Message{
+			{Role: ports.RoleAssistant, Blocks: []ports.Block{
+				{Kind: ports.BlockToolCall, ToolCallID: "call_1", ToolName: "echo", ToolInput: []byte(`{}`)},
 			}},
-			{Role: provider.RoleUser, Blocks: []provider.Block{
-				{Kind: provider.BlockToolResult, ToolResultForID: "call_1", ToolResultText: "hi"},
+			{Role: ports.RoleUser, Blocks: []ports.Block{
+				{Kind: ports.BlockToolResult, ToolResultForID: "call_1", ToolResultText: "hi"},
 			}},
 		},
 	}

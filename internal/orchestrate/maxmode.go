@@ -14,7 +14,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/7solutions/openplus/internal/provider"
+	"github.com/7solutions/openplus/internal/ports"
 )
 
 // DefaultSamples is the N used when the caller names none. Three is enough for a
@@ -56,7 +56,7 @@ type Candidate struct {
 // Sampler produces N independent answers to the same request.
 type Sampler struct {
 	// Provider is the generating model backend.
-	Provider provider.Provider
+	Provider ports.Provider
 	// Runner supplies the bounded fan-out. Its Isolator is deliberately unused:
 	// generations do not touch the filesystem, so isolation buys nothing.
 	Runner Runner
@@ -66,7 +66,7 @@ type Sampler struct {
 // Runner's MaxParallel, and returns them in stable index order regardless of
 // completion timing. A generation's failure is recorded on its candidate rather
 // than aborting the set: N-1 usable answers still beat none.
-func (s Sampler) Sample(ctx context.Context, req provider.Request, n int) ([]Candidate, error) {
+func (s Sampler) Sample(ctx context.Context, req ports.Request, n int) ([]Candidate, error) {
 	if n < 1 {
 		return nil, fmt.Errorf("orchestrate: sample count must be >= 1, got %d", n)
 	}
@@ -104,7 +104,7 @@ func (s Sampler) Sample(ctx context.Context, req provider.Request, n int) ([]Can
 // generateText streams one generation and accumulates its text. A streamed error
 // event fails the generation: a truncated answer must not be judged as if it were
 // complete.
-func generateText(ctx context.Context, p provider.Provider, req provider.Request) (string, error) {
+func generateText(ctx context.Context, p ports.Provider, req ports.Request) (string, error) {
 	events, err := p.Stream(ctx, req)
 	if err != nil {
 		return "", err
@@ -112,9 +112,9 @@ func generateText(ctx context.Context, p provider.Provider, req provider.Request
 	var out strings.Builder
 	for ev := range events {
 		switch ev.Kind {
-		case provider.EventTextDelta:
+		case ports.EventTextDelta:
 			out.WriteString(ev.Text)
-		case provider.EventError:
+		case ports.EventError:
 			return "", ev.Err
 		}
 	}
@@ -136,7 +136,7 @@ Choose exactly one number. If two candidates are genuinely equal, choose the low
 // an independent model that renders a verdict and nothing more.
 type Ranker struct {
 	// Provider is the judge's model backend — independent of the sampler's.
-	Provider provider.Provider
+	Provider ports.Provider
 	// Model is the judge model id ("<provider>/<model>").
 	Model string
 }
@@ -166,13 +166,13 @@ func (r Ranker) Rank(ctx context.Context, prompt string, cands []Candidate) (int
 		return usable[0], "only one candidate generated successfully", nil
 	}
 
-	req := provider.Request{
+	req := ports.Request{
 		Model:  r.Model,
 		System: rankerSystemPrompt,
-		Messages: []provider.Message{{
-			Role: provider.RoleUser,
-			Blocks: []provider.Block{{
-				Kind: provider.BlockText,
+		Messages: []ports.Message{{
+			Role: ports.RoleUser,
+			Blocks: []ports.Block{{
+				Kind: ports.BlockText,
 				Text: renderCandidates(prompt, cands),
 			}},
 		}},
@@ -279,7 +279,7 @@ type MaxMode struct {
 // judged winner would be a lie.
 //
 // n == 1 skips the judge — there is nothing to compare.
-func (m MaxMode) Run(ctx context.Context, req provider.Request, n int) (Candidate, error) {
+func (m MaxMode) Run(ctx context.Context, req ports.Request, n int) (Candidate, error) {
 	cands, err := m.Sampler.Sample(ctx, req, n)
 	if err != nil {
 		return Candidate{}, err
@@ -308,6 +308,6 @@ func (m MaxMode) Run(ctx context.Context, req provider.Request, n int) (Candidat
 // promptOf renders the request as the prompt text the judge is shown. The judge
 // ranks answers to a question, so it needs the question — flattened the same way
 // the goal Judge flattens a transcript.
-func promptOf(req provider.Request) string {
+func promptOf(req ports.Request) string {
 	return strings.TrimSpace(flattenHistory(req.Messages))
 }

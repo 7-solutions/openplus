@@ -5,7 +5,8 @@ import (
 	"testing"
 
 	"github.com/7solutions/openplus/internal/policy"
-	"github.com/7solutions/openplus/internal/provider"
+	"github.com/7solutions/openplus/internal/ports"
+	portsfake "github.com/7solutions/openplus/internal/ports/providerfake"
 	"github.com/7solutions/openplus/internal/tool"
 )
 
@@ -14,19 +15,19 @@ import (
 // It proves the loop's shape (turn -> tool call -> tool result -> turn ->
 // done) using zero network access and zero external dependencies.
 func TestAgent_ToolUseThenFinish(t *testing.T) {
-	fake := &provider.Fake{
-		Scripts: [][]provider.Event{
+	fake := &portsfake.Fake{
+		Scripts: [][]ports.Event{
 			// Turn 1: model asks to call "echo".
 			{
-				{Kind: provider.EventToolCallStart, Call: &provider.ToolCall{
+				{Kind: ports.EventToolCallStart, Call: &ports.ToolCall{
 					ID: "call_1", Name: "echo", Input: []byte(`{"text":"hello openplus"}`),
 				}},
-				{Kind: provider.EventTurnEnd},
+				{Kind: ports.EventTurnEnd},
 			},
 			// Turn 2: model is satisfied with the tool result and stops.
 			{
-				{Kind: provider.EventTextDelta, Text: "done"},
-				{Kind: provider.EventTurnEnd},
+				{Kind: ports.EventTextDelta, Text: "done"},
+				{Kind: ports.EventTurnEnd},
 			},
 		},
 	}
@@ -46,10 +47,10 @@ func TestAgent_ToolUseThenFinish(t *testing.T) {
 	if len(history) != 3 {
 		t.Fatalf("expected 3 messages, got %d: %+v", len(history), history)
 	}
-	if history[0].Role != provider.RoleAssistant || history[0].Blocks[0].ToolName != "echo" {
+	if history[0].Role != ports.RoleAssistant || history[0].Blocks[0].ToolName != "echo" {
 		t.Fatalf("turn 1 assistant message malformed: %+v", history[0])
 	}
-	if history[1].Role != provider.RoleUser || history[1].Blocks[0].Kind != provider.BlockToolResult {
+	if history[1].Role != ports.RoleUser || history[1].Blocks[0].Kind != ports.BlockToolResult {
 		t.Fatalf("tool result message malformed: %+v", history[1])
 	}
 	if history[1].Blocks[0].ToolResultText != "hello openplus" {
@@ -58,7 +59,7 @@ func TestAgent_ToolUseThenFinish(t *testing.T) {
 	if history[1].Blocks[0].ToolResultError {
 		t.Fatalf("expected no error on tool result, got one")
 	}
-	if history[2].Role != provider.RoleAssistant || history[2].Blocks[0].Text != "done" {
+	if history[2].Role != ports.RoleAssistant || history[2].Blocks[0].Text != "done" {
 		t.Fatalf("final assistant message malformed: %+v", history[2])
 	}
 }
@@ -67,15 +68,15 @@ func TestAgent_ToolUseThenFinish(t *testing.T) {
 // Scenario: Denied destructive command) feeds a denial back instead of
 // executing, and the loop still proceeds.
 func TestAgent_DeniedToolCallDoesNotExecute(t *testing.T) {
-	fake := &provider.Fake{
-		Scripts: [][]provider.Event{
+	fake := &portsfake.Fake{
+		Scripts: [][]ports.Event{
 			{
-				{Kind: provider.EventToolCallStart, Call: &provider.ToolCall{
+				{Kind: ports.EventToolCallStart, Call: &ports.ToolCall{
 					ID: "call_1", Name: "echo", Input: []byte(`{"text":"should not run"}`),
 				}},
-				{Kind: provider.EventTurnEnd},
+				{Kind: ports.EventTurnEnd},
 			},
-			{{Kind: provider.EventTurnEnd}},
+			{{Kind: ports.EventTurnEnd}},
 		},
 	}
 
@@ -100,13 +101,13 @@ func TestAgent_DeniedToolCallDoesNotExecute(t *testing.T) {
 
 // Proves OnToolResult fires with the call and its result block (T-031 seam).
 func TestAgent_OnToolResultFires(t *testing.T) {
-	fake := &provider.Fake{
-		Scripts: [][]provider.Event{
+	fake := &portsfake.Fake{
+		Scripts: [][]ports.Event{
 			{{
-				Kind: provider.EventToolCallStart,
-				Call: &provider.ToolCall{ID: "c1", Name: "echo", Input: []byte(`{"text":"hi"}`)},
-			}, {Kind: provider.EventTurnEnd}},
-			{{Kind: provider.EventTurnEnd}},
+				Kind: ports.EventToolCallStart,
+				Call: &ports.ToolCall{ID: "c1", Name: "echo", Input: []byte(`{"text":"hi"}`)},
+			}, {Kind: ports.EventTurnEnd}},
+			{{Kind: ports.EventTurnEnd}},
 		},
 	}
 	type seen struct {
@@ -118,7 +119,7 @@ func TestAgent_OnToolResultFires(t *testing.T) {
 		Provider: fake,
 		Tools:    tool.NewRegistry(tool.Echo{}),
 		Gate:     policy.AllowAll{},
-		OnToolResult: func(call provider.ToolCall, result provider.Block) {
+		OnToolResult: func(call ports.ToolCall, result ports.Block) {
 			got = append(got, seen{call.Name, result.ToolResultText})
 		},
 	}
@@ -133,12 +134,12 @@ func TestAgent_OnToolResultFires(t *testing.T) {
 // Proves EventThinkingDelta is captured into a neutral BlockThinking (extended
 // thinking, ADR-0005 / T-012) rather than mixed into assistant text.
 func TestAgent_CapturesThinking(t *testing.T) {
-	fake := &provider.Fake{
-		Scripts: [][]provider.Event{
+	fake := &portsfake.Fake{
+		Scripts: [][]ports.Event{
 			{
-				{Kind: provider.EventThinkingDelta, Text: "reasoning..."},
-				{Kind: provider.EventTextDelta, Text: "answer"},
-				{Kind: provider.EventTurnEnd},
+				{Kind: ports.EventThinkingDelta, Text: "reasoning..."},
+				{Kind: ports.EventTextDelta, Text: "answer"},
+				{Kind: ports.EventTurnEnd},
 			},
 		},
 	}
@@ -149,8 +150,8 @@ func TestAgent_CapturesThinking(t *testing.T) {
 	}
 	blocks := history[0].Blocks
 	if len(blocks) != 2 ||
-		blocks[0].Kind != provider.BlockThinking || blocks[0].Text != "reasoning..." ||
-		blocks[1].Kind != provider.BlockText || blocks[1].Text != "answer" {
+		blocks[0].Kind != ports.BlockThinking || blocks[0].Text != "reasoning..." ||
+		blocks[1].Kind != ports.BlockText || blocks[1].Text != "answer" {
 		t.Fatalf("thinking not captured separately: %+v", blocks)
 	}
 }

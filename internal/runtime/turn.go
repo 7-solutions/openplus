@@ -8,7 +8,7 @@ import (
 	"github.com/7solutions/openplus/internal/agent"
 	"github.com/7solutions/openplus/internal/contextmgr"
 	"github.com/7solutions/openplus/internal/improve"
-	"github.com/7solutions/openplus/internal/provider"
+	"github.com/7solutions/openplus/internal/ports"
 )
 
 // MemoryTopK bounds how many memory chunks are retrieved per turn.
@@ -18,7 +18,7 @@ const MemoryTopK = 5
 // see, and the message history to send with it.
 type Turn struct {
 	System  string
-	History []provider.Message
+	History []ports.Message
 	// Used is the budgeter's estimate of the assembled context's token cost.
 	// It is what the checkpoint high-water decision is measured against.
 	Used int
@@ -30,7 +30,7 @@ type Turn struct {
 //
 // Retrieval failures are not fatal. Memory and skills are enrichment — losing
 // them degrades the answer, whereas refusing the turn loses it entirely.
-func (s *Session) AssembleContext(ctx context.Context, userMsg string, history []provider.Message) (Turn, error) {
+func (s *Session) AssembleContext(ctx context.Context, userMsg string, history []ports.Message) (Turn, error) {
 	in := s.baseInput()
 
 	// Retrieved memory (ADR-0003 hybrid search).
@@ -53,7 +53,7 @@ func (s *Session) AssembleContext(ctx context.Context, userMsg string, history [
 
 	// The new user message plus the prior history are the retained recent
 	// messages the budgeter may trim.
-	in.Recent = append(append([]provider.Message{}, history...), userMessage(userMsg))
+	in.Recent = append(append([]ports.Message{}, history...), userMessage(userMsg))
 
 	out := s.Budgeter.Fit(in)
 
@@ -98,7 +98,7 @@ func (s *Session) baseInput() contextmgr.Input {
 // MET stops; UNMET appends the judge's feedback to history and re-runs the
 // agent loop. The loop is bounded by Session.MaxJudgeIterations (default
 // DefaultMaxJudgeIterations = 3) so an unsatisfiable goal can't run forever.
-func (s *Session) Run(ctx context.Context, userMsg string, history []provider.Message) ([]provider.Message, error) {
+func (s *Session) Run(ctx context.Context, userMsg string, history []ports.Message) ([]ports.Message, error) {
 	if strings.TrimSpace(userMsg) == "" {
 		return nil, fmt.Errorf("runtime: empty user message")
 	}
@@ -122,7 +122,7 @@ func (s *Session) Run(ctx context.Context, userMsg string, history []provider.Me
 	maxIter := s.maxJudgeIterations()
 	currentHistory := turn.History
 
-	var final []provider.Message
+	var final []ports.Message
 	for round := 0; round < maxIter; round++ {
 		hist, err := a.Run(ctx, turn.System, s.ToolSchemas, currentHistory)
 		if err != nil {
@@ -153,10 +153,10 @@ func (s *Session) Run(ctx context.Context, userMsg string, history []provider.Me
 		if feedback == "" {
 			feedback = "(judge said UNMET with no feedback)"
 		}
-		currentHistory = append(currentHistory, provider.Message{
-			Role: provider.RoleUser,
-			Blocks: []provider.Block{
-				{Kind: provider.BlockText, Text: "The goal is not met yet. Judge feedback:\n\n" + feedback},
+		currentHistory = append(currentHistory, ports.Message{
+			Role: ports.RoleUser,
+			Blocks: []ports.Block{
+				{Kind: ports.BlockText, Text: "The goal is not met yet. Judge feedback:\n\n" + feedback},
 			},
 		})
 	}
@@ -183,7 +183,7 @@ func (s *Session) Run(ctx context.Context, userMsg string, history []provider.Me
 // record keeps the session's own transcript and tool-sequence log up to date.
 // Without this, /dream has no transcript to extract from and /distill has no runs
 // to mine — the commands would dispatch and find nothing.
-func (s *Session) record(final []provider.Message) {
+func (s *Session) record(final []ports.Message) {
 	s.History = final
 
 	// A turn's tool calls, in call order, are one "run" for pattern mining. A
@@ -192,7 +192,7 @@ func (s *Session) record(final []provider.Message) {
 	var tools []string
 	for _, m := range final {
 		for _, b := range m.Blocks {
-			if b.Kind == provider.BlockToolCall && b.ToolName != "" {
+			if b.Kind == ports.BlockToolCall && b.ToolName != "" {
 				tools = append(tools, b.ToolName)
 			}
 		}
@@ -213,7 +213,7 @@ func (s *Session) record(final []provider.Message) {
 // A write failure is reported rather than returned: the turn already produced
 // value for the user, but losing durability is something the operator must know
 // about, so it goes to OnCheckpointError instead of being dropped.
-func (s *Session) maybeCheckpoint(used int, history []provider.Message) (wrote bool) {
+func (s *Session) maybeCheckpoint(used int, history []ports.Message) (wrote bool) {
 	if s.Checkpointer == nil || !s.Checkpointer.ShouldCheckpoint(used) {
 		return false
 	}
@@ -242,7 +242,7 @@ const DefaultKeepRecent = 6
 // is forgetting, and forgetting material that was never written down is data
 // loss. A history at or under the keep-count is returned untouched, since there
 // is nothing worth dropping.
-func (s *Session) compact(history []provider.Message) []provider.Message {
+func (s *Session) compact(history []ports.Message) []ports.Message {
 	keep := s.KeepRecent
 	if keep <= 0 {
 		keep = DefaultKeepRecent
@@ -252,10 +252,10 @@ func (s *Session) compact(history []provider.Message) []provider.Message {
 	}
 
 	dropped := len(history) - keep
-	marker := provider.Message{
-		Role: provider.RoleUser,
-		Blocks: []provider.Block{{
-			Kind: provider.BlockText,
+	marker := ports.Message{
+		Role: ports.RoleUser,
+		Blocks: []ports.Block{{
+			Kind: ports.BlockText,
 			// Bracketed and explicit: the model and any human reading the
 			// transcript must both see that material was moved, not lost, and
 			// where it went.
@@ -265,7 +265,7 @@ func (s *Session) compact(history []provider.Message) []provider.Message {
 		}},
 	}
 
-	out := make([]provider.Message, 0, keep+1)
+	out := make([]ports.Message, 0, keep+1)
 	out = append(out, marker)
 	out = append(out, history[len(history)-keep:]...)
 	return out
@@ -283,7 +283,7 @@ const SummaryCap = 8000
 // happens at a message boundary (a half-message is worse than an absent one),
 // and the loss is stated in the summary itself — a checkpoint that silently
 // discards the line that mattered is the failure this design exists to avoid.
-func buildSummary(history []provider.Message) string {
+func buildSummary(history []ports.Message) string {
 	if len(history) == 0 {
 		return ""
 	}
@@ -321,15 +321,15 @@ func buildSummary(history []provider.Message) string {
 // flattenMessage renders one message's blocks as a single verbatim line. Tool
 // calls and results are included: what the agent did is as much of the record as
 // what it said.
-func flattenMessage(blocks []provider.Block) string {
+func flattenMessage(blocks []ports.Block) string {
 	parts := make([]string, 0, len(blocks))
 	for _, b := range blocks {
 		switch b.Kind {
-		case provider.BlockText, provider.BlockThinking:
+		case ports.BlockText, ports.BlockThinking:
 			parts = append(parts, b.Text)
-		case provider.BlockToolCall:
+		case ports.BlockToolCall:
 			parts = append(parts, fmt.Sprintf("%s(%s)", b.ToolName, b.ToolInput))
-		case provider.BlockToolResult:
+		case ports.BlockToolResult:
 			parts = append(parts, b.ToolResultText)
 		}
 	}
@@ -339,7 +339,7 @@ func flattenMessage(blocks []provider.Block) string {
 // persist writes the exchange to memory. A write failure is deliberately
 // non-fatal: losing a memory entry must not fail a turn the user already got
 // value from.
-func (s *Session) persist(ctx context.Context, userMsg string, history []provider.Message) {
+func (s *Session) persist(ctx context.Context, userMsg string, history []ports.Message) {
 	if s.Memory == nil {
 		return
 	}
@@ -379,23 +379,23 @@ func renderSystem(out contextmgr.Output) string {
 	return b.String()
 }
 
-func userMessage(text string) provider.Message {
-	return provider.Message{
-		Role:   provider.RoleUser,
-		Blocks: []provider.Block{{Kind: provider.BlockText, Text: text}},
+func userMessage(text string) ports.Message {
+	return ports.Message{
+		Role:   ports.RoleUser,
+		Blocks: []ports.Block{{Kind: ports.BlockText, Text: text}},
 	}
 }
 
 // lastAssistantText returns the final assistant text in a history, used to give
 // a persisted memory entry both sides of the exchange.
-func lastAssistantText(history []provider.Message) string {
+func lastAssistantText(history []ports.Message) string {
 	for i := len(history) - 1; i >= 0; i-- {
-		if history[i].Role != provider.RoleAssistant {
+		if history[i].Role != ports.RoleAssistant {
 			continue
 		}
 		var parts []string
 		for _, b := range history[i].Blocks {
-			if b.Kind == provider.BlockText && b.Text != "" {
+			if b.Kind == ports.BlockText && b.Text != "" {
 				parts = append(parts, b.Text)
 			}
 		}

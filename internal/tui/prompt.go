@@ -6,7 +6,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/7solutions/openplus/internal/policy"
-	"github.com/7solutions/openplus/internal/provider"
+	"github.com/7solutions/openplus/internal/ports"
 )
 
 // Prompter implements policy.Prompter for the TUI. On Ask it pushes a promptMsg
@@ -24,7 +24,7 @@ func NewPrompter(send func(tea.Msg), answer <-chan bool) *Prompter {
 }
 
 // Ask surfaces the call as a prompt and blocks for the user's decision.
-func (p *Prompter) Ask(ctx context.Context, call provider.ToolCall) (bool, error) {
+func (p *Prompter) Ask(ctx context.Context, call ports.ToolCall) (bool, error) {
 	p.send(promptMsg{call: call})
 	select {
 	case approved := <-p.answer:

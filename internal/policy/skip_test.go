@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/7solutions/openplus/internal/provider"
+	"github.com/7solutions/openplus/internal/ports"
 )
 
 func TestSkipExplicitDenyWinsOverBase(t *testing.T) {
@@ -12,7 +12,7 @@ func TestSkipExplicitDenyWinsOverBase(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSkip: %v", err)
 	}
-	got, _ := s.Permit(context.Background(), provider.ToolCall{Name: "bash", Input: []byte(`{}`)})
+	got, _ := s.Permit(context.Background(), ports.ToolCall{Name: "bash", Input: []byte(`{}`)})
 	if got != Deny {
 		t.Fatalf("explicit deny lost to base: got %v, want Deny", got)
 	}
@@ -20,7 +20,7 @@ func TestSkipExplicitDenyWinsOverBase(t *testing.T) {
 
 func TestSkipBaseAllowsUnmatched(t *testing.T) {
 	s, _ := NewSkip(map[string]string{"bash": "deny"}, nil)
-	got, _ := s.Permit(context.Background(), provider.ToolCall{Name: "read", Input: []byte(`{}`)})
+	got, _ := s.Permit(context.Background(), ports.ToolCall{Name: "read", Input: []byte(`{}`)})
 	if got != Allow {
 		t.Fatalf("unmatched call: got %v, want Allow (base)", got)
 	}
@@ -30,11 +30,11 @@ func TestSkipAskBecomesAllow(t *testing.T) {
 	// --dangerously-skip-permissions skips prompts: an explicit ask rule must
 	// not block (becomes Allow), while an explicit deny still denies.
 	s, _ := NewSkip(map[string]string{"bash": "ask", "rm": "deny"}, nil)
-	got, _ := s.Permit(context.Background(), provider.ToolCall{Name: "bash", Input: []byte(`{}`)})
+	got, _ := s.Permit(context.Background(), ports.ToolCall{Name: "bash", Input: []byte(`{}`)})
 	if got != Allow {
 		t.Fatalf("ask should become allow under skip: got %v", got)
 	}
-	got, _ = s.Permit(context.Background(), provider.ToolCall{Name: "rm", Input: []byte(`{}`)})
+	got, _ = s.Permit(context.Background(), ports.ToolCall{Name: "rm", Input: []byte(`{}`)})
 	if got != Deny {
 		t.Fatalf("deny must still deny under skip: got %v", got)
 	}
@@ -43,13 +43,13 @@ func TestSkipAskBecomesAllow(t *testing.T) {
 func TestSkipPathRulesWin(t *testing.T) {
 	// explicit path deny still wins even with an allow-all base.
 	s, _ := NewSkip(nil, map[string]string{"/etc/**": "deny"})
-	got, _ := s.Permit(context.Background(), provider.ToolCall{
+	got, _ := s.Permit(context.Background(), ports.ToolCall{
 		Name: "write", Input: []byte(`{"file_path":"/etc/passwd"}`),
 	})
 	if got != Deny {
 		t.Fatalf("path deny lost: got %v", got)
 	}
-	got, _ = s.Permit(context.Background(), provider.ToolCall{
+	got, _ = s.Permit(context.Background(), ports.ToolCall{
 		Name: "write", Input: []byte(`{"file_path":"/tmp/x"}`),
 	})
 	if got != Allow {

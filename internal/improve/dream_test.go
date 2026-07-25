@@ -6,23 +6,24 @@ import (
 	"testing"
 	"time"
 
-	"github.com/7solutions/openplus/internal/provider"
+	"github.com/7solutions/openplus/internal/ports"
+	portsfake "github.com/7solutions/openplus/internal/ports/providerfake"
 )
 
 // extractorSays builds a Fake provider that streams one extraction reply.
-func extractorSays(reply string) *provider.Fake {
-	return &provider.Fake{Scripts: [][]provider.Event{{
-		{Kind: provider.EventTextDelta, Text: reply},
-		{Kind: provider.EventTurnEnd},
+func extractorSays(reply string) *portsfake.Fake {
+	return &portsfake.Fake{Scripts: [][]ports.Event{{
+		{Kind: ports.EventTextDelta, Text: reply},
+		{Kind: ports.EventTurnEnd},
 	}}}
 }
 
-func trace(texts ...string) []provider.Message {
-	msgs := make([]provider.Message, 0, len(texts))
+func trace(texts ...string) []ports.Message {
+	msgs := make([]ports.Message, 0, len(texts))
 	for _, tx := range texts {
-		msgs = append(msgs, provider.Message{
-			Role:   provider.RoleAssistant,
-			Blocks: []provider.Block{{Kind: provider.BlockText, Text: tx}},
+		msgs = append(msgs, ports.Message{
+			Role:   ports.RoleAssistant,
+			Blocks: []ports.Block{{Kind: ports.BlockText, Text: tx}},
 		})
 	}
 	return msgs
@@ -81,8 +82,8 @@ func TestDreamNoProviderErrors(t *testing.T) {
 }
 
 func TestDreamProviderErrorPropagates(t *testing.T) {
-	d := Dreamer{Provider: &provider.Fake{Scripts: [][]provider.Event{{
-		{Kind: provider.EventError, Err: errDreamBoom},
+	d := Dreamer{Provider: &portsfake.Fake{Scripts: [][]ports.Event{{
+		{Kind: ports.EventError, Err: errDreamBoom},
 	}}}}
 	if _, err := d.Extract(context.Background(), trace("x")); err == nil {
 		t.Fatal("expected the provider error to propagate")
@@ -197,7 +198,7 @@ type recordingProvider struct {
 	gotTools  int
 }
 
-func (r *recordingProvider) Stream(ctx context.Context, req provider.Request) (<-chan provider.Event, error) {
+func (r *recordingProvider) Stream(ctx context.Context, req ports.Request) (<-chan ports.Event, error) {
 	r.gotModel = req.Model
 	r.gotSystem = req.System
 	r.gotTools = len(req.Tools)
@@ -210,9 +211,9 @@ func (r *recordingProvider) Stream(ctx context.Context, req provider.Request) (<
 	}
 	r.gotUser = b.String()
 
-	ch := make(chan provider.Event, 2)
-	ch <- provider.Event{Kind: provider.EventTextDelta, Text: r.reply}
-	ch <- provider.Event{Kind: provider.EventTurnEnd}
+	ch := make(chan ports.Event, 2)
+	ch <- ports.Event{Kind: ports.EventTextDelta, Text: r.reply}
+	ch <- ports.Event{Kind: ports.EventTurnEnd}
 	close(ch)
 	return ch, nil
 }

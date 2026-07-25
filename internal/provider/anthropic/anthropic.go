@@ -1,9 +1,9 @@
 // Package anthropic is the Anthropic Messages API adapter (ADR-0005, T-012).
-// It maps the neutral provider.Request/Event model onto the Anthropic wire
+// It maps the neutral ports.Request/Event model onto the Anthropic wire
 // shape — top-level system, tool_use/tool_result content blocks, input_schema
 // tool definitions — and parses the message_* / content_block_* SSE stream back
 // into neutral Events. No Anthropic type escapes this package; the agent loop
-// sees only provider.Provider.
+// sees only ports.Provider.
 package anthropic
 
 import (
@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/7solutions/openplus/internal/ports"
 	"github.com/7solutions/openplus/internal/provider"
 )
 
@@ -32,7 +33,7 @@ const (
 	ThinkingBudgetTokens = 4096
 )
 
-// Adapter speaks the Anthropic Messages API. It implements provider.Provider.
+// Adapter speaks the Anthropic Messages API. It implements ports.Provider.
 type Adapter struct {
 	// BaseURL overrides DefaultBaseURL (set this to a proxy/mock in tests).
 	BaseURL string
@@ -46,7 +47,7 @@ type Adapter struct {
 
 // Stream posts req to {BaseURL}/v1/messages as a streaming Messages request
 // and returns a channel of neutral Events parsed from the SSE response.
-func (a *Adapter) Stream(ctx context.Context, req provider.Request) (<-chan provider.Event, error) {
+func (a *Adapter) Stream(ctx context.Context, req ports.Request) (<-chan ports.Event, error) {
 	base := a.BaseURL
 	if base == "" {
 		base = DefaultBaseURL
@@ -78,7 +79,7 @@ func (a *Adapter) Stream(ctx context.Context, req provider.Request) (<-chan prov
 		return nil, fmt.Errorf("anthropic: post: %w", err)
 	}
 
-	out := make(chan provider.Event)
+	out := make(chan ports.Event)
 	go func() {
 		defer close(out)
 		defer resp.Body.Close()
@@ -89,10 +90,10 @@ func (a *Adapter) Stream(ctx context.Context, req provider.Request) (<-chan prov
 
 // pump reads the SSE stream and emits neutral Events. It owns the response
 // body's lifetime (closed by the goroutine in Stream).
-func (a *Adapter) pump(ctx context.Context, resp *http.Response, out chan<- provider.Event) {
+func (a *Adapter) pump(ctx context.Context, resp *http.Response, out chan<- ports.Event) {
 	if resp.StatusCode != http.StatusOK {
 		preview, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		send(ctx, out, provider.Event{Kind: provider.EventError, Err: fmt.Errorf("anthropic: http %d: %s", resp.StatusCode, preview)})
+		send(ctx, out, ports.Event{Kind: ports.EventError, Err: fmt.Errorf("anthropic: http %d: %s", resp.StatusCode, preview)})
 		return
 	}
 
@@ -102,16 +103,16 @@ func (a *Adapter) pump(ctx context.Context, resp *http.Response, out chan<- prov
 
 	var inputTokens, outputTokens int
 
-	emit := func(ev provider.Event) { send(ctx, out, ev) }
+	emit := func(ev ports.Event) { send(ctx, out, ev) }
 
 	for {
 		select {
 		case <-ctx.Done():
-			emit(provider.Event{Kind: provider.EventError, Err: ctx.Err()})
+			emit(ports.Event{Kind: ports.EventError, Err: ctx.Err()})
 			return
 		case err, ok := <-errs:
 			if ok && err != nil {
-				emit(provider.Event{Kind: provider.EventError, Err: fmt.Errorf("anthropic: sse: %w", err)})
+				emit(ports.Event{Kind: ports.EventError, Err: fmt.Errorf("anthropic: sse: %w", err)})
 				return
 			}
 		case frame, ok := <-frames:
@@ -124,7 +125,7 @@ func (a *Adapter) pump(ctx context.Context, resp *http.Response, out chan<- prov
 }
 
 // handleFrame decodes one Anthropic SSE frame into neutral Events.
-func (a *Adapter) handleFrame(frame provider.SSEFrame, blocks map[int]*blockState, inputTokens, outputTokens *int, emit func(provider.Event)) {
+func (a *Adapter) handleFrame(frame provider.SSEFrame, blocks map[int]*blockState, inputTokens, outputTokens *int, emit func(ports.Event)) {
 	var hdr struct {
 		Type string `json:"type"`
 	}
@@ -142,7 +143,7 @@ func (a *Adapter) handleFrame(frame provider.SSEFrame, blocks map[int]*blockStat
 			} `json:"error"`
 		}
 		_ = json.Unmarshal([]byte(frame.Data), &e)
-		emit(provider.Event{Kind: provider.EventError, Err: fmt.Errorf("anthropic: %s: %s", e.Error.Type, e.Error.Message)})
+		emit(ports.Event{Kind: ports.EventError, Err: fmt.Errorf("anthropic: %s: %s", e.Error.Type, e.Error.Message)})
 
 	case "message_start":
 		var m struct {
@@ -184,9 +185,9 @@ func (a *Adapter) handleFrame(frame provider.SSEFrame, blocks map[int]*blockStat
 		}
 		switch d.Delta.Type {
 		case "text_delta":
-			emit(provider.Event{Kind: provider.EventTextDelta, Text: d.Delta.Text})
+			emit(ports.Event{Kind: ports.EventTextDelta, Text: d.Delta.Text})
 		case "thinking_delta":
-			emit(provider.Event{Kind: provider.EventThinkingDelta, Text: d.Delta.Thinking})
+			emit(ports.Event{Kind: ports.EventThinkingDelta, Text: d.Delta.Thinking})
 		case "input_json_delta":
 			st.input = append(st.input, d.Delta.PartialJSON...)
 		}
@@ -201,7 +202,7 @@ func (a *Adapter) handleFrame(frame provider.SSEFrame, blocks map[int]*blockStat
 			return
 		}
 		if st.kind == "tool_use" {
-			emit(provider.Event{Kind: provider.EventToolCallStart, Call: &provider.ToolCall{
+			emit(ports.Event{Kind: ports.EventToolCallStart, Call: &ports.ToolCall{
 				ID:    st.callID,
 				Name:  st.callName,
 				Input: st.input,
@@ -217,13 +218,13 @@ func (a *Adapter) handleFrame(frame provider.SSEFrame, blocks map[int]*blockStat
 		}
 		_ = json.Unmarshal([]byte(frame.Data), &m)
 		*outputTokens = m.Usage.OutputTokens
-		emit(provider.Event{Kind: provider.EventUsage, Usage: &provider.Usage{
+		emit(ports.Event{Kind: ports.EventUsage, Usage: &ports.Usage{
 			InputTokens:  *inputTokens,
 			OutputTokens: *outputTokens,
 		}})
 
 	case "message_stop":
-		emit(provider.Event{Kind: provider.EventTurnEnd})
+		emit(ports.Event{Kind: ports.EventTurnEnd})
 	}
 }
 
@@ -236,7 +237,7 @@ type blockState struct {
 }
 
 // marshalRequest builds the Anthropic wire request body from the neutral Request.
-func marshalRequest(req provider.Request, maxTokens int) ([]byte, error) {
+func marshalRequest(req ports.Request, maxTokens int) ([]byte, error) {
 	out := map[string]any{
 		"model":      stripProviderPrefix(req.Model),
 		"max_tokens": maxTokens,
@@ -263,7 +264,7 @@ func marshalRequest(req provider.Request, maxTokens int) ([]byte, error) {
 	return json.Marshal(out)
 }
 
-func marshalMessages(msgs []provider.Message) []any {
+func marshalMessages(msgs []ports.Message) []any {
 	out := make([]any, 0, len(msgs))
 	for _, m := range msgs {
 		out = append(out, map[string]any{
@@ -274,13 +275,13 @@ func marshalMessages(msgs []provider.Message) []any {
 	return out
 }
 
-func marshalBlocks(blocks []provider.Block) []any {
+func marshalBlocks(blocks []ports.Block) []any {
 	out := make([]any, 0, len(blocks))
 	for _, b := range blocks {
 		switch b.Kind {
-		case provider.BlockText:
+		case ports.BlockText:
 			out = append(out, map[string]any{"type": "text", "text": b.Text})
-		case provider.BlockToolCall:
+		case ports.BlockToolCall:
 			// Coerce empty input to {} — a nil/empty RawMessage marshals to
 			// null (or errors for len-0 non-nil), but Anthropic requires an
 			// object. This also makes no-arg tool calls round-trip cleanly.
@@ -294,21 +295,21 @@ func marshalBlocks(blocks []provider.Block) []any {
 				"name":  b.ToolName,
 				"input": json.RawMessage(input),
 			})
-		case provider.BlockToolResult:
+		case ports.BlockToolResult:
 			out = append(out, map[string]any{
 				"type":        "tool_result",
 				"tool_use_id": b.ToolResultForID,
 				"content":     b.ToolResultText,
 				"is_error":    b.ToolResultError,
 			})
-		case provider.BlockThinking:
+		case ports.BlockThinking:
 			out = append(out, map[string]any{"type": "thinking", "thinking": b.Text})
 		}
 	}
 	return out
 }
 
-func marshalTools(tools []provider.ToolSchema) []any {
+func marshalTools(tools []ports.ToolSchema) []any {
 	out := make([]any, 0, len(tools))
 	for _, t := range tools {
 		schema := json.RawMessage(t.InputSchema)
@@ -334,7 +335,7 @@ func stripProviderPrefix(model string) string {
 }
 
 // send emits ev on out unless ctx is done (non-blocking relative to ctx).
-func send(ctx context.Context, out chan<- provider.Event, ev provider.Event) {
+func send(ctx context.Context, out chan<- ports.Event, ev ports.Event) {
 	select {
 	case <-ctx.Done():
 	case out <- ev:

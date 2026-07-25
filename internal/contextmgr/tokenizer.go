@@ -17,7 +17,7 @@ import (
 
 	"github.com/pkoukk/tiktoken-go"
 
-	"github.com/7solutions/openplus/internal/provider"
+	"github.com/7solutions/openplus/internal/ports"
 )
 
 // Characters-per-token ratios, calibrated against representative English prose
@@ -185,20 +185,20 @@ const blockOverheadTokens = 4
 // CountMessages estimates the total token cost of a neutral message history,
 // counting every block kind that carries text or JSON plus per-block framing
 // overhead.
-func CountMessages(tk Tokenizer, msgs []provider.Message) int {
+func CountMessages(tk Tokenizer, msgs []ports.Message) int {
 	total := 0
 	for _, m := range msgs {
 		for _, b := range m.Blocks {
 			total += blockOverheadTokens
 			switch b.Kind {
-			case provider.BlockText, provider.BlockThinking:
+			case ports.BlockText, ports.BlockThinking:
 				total += tk.Count(b.Text)
-			case provider.BlockToolCall:
+			case ports.BlockToolCall:
 				total += tk.Count(b.ToolName)
 				total += tk.Count(string(b.ToolInput))
-			case provider.BlockToolResult:
+			case ports.BlockToolResult:
 				total += tk.Count(b.ToolResultText)
-			case provider.BlockImage:
+			case ports.BlockImage:
 				// Images are billed by tile, not text; approximate a flat cost.
 				total += imageTokenEstimate
 			}

@@ -5,7 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/7solutions/openplus/internal/provider"
+	"github.com/7solutions/openplus/internal/ports"
 )
 
 func newTestModel() Model {
@@ -14,10 +14,10 @@ func newTestModel() Model {
 
 func TestApplyEventTextDeltaAccumulates(t *testing.T) {
 	m := newTestModel()
-	m.applyEvent(provider.Event{Kind: provider.EventTextDelta, Text: "hel"})
-	m.applyEvent(provider.Event{Kind: provider.EventTextDelta, Text: "lo"})
+	m.applyEvent(ports.Event{Kind: ports.EventTextDelta, Text: "hel"})
+	m.applyEvent(ports.Event{Kind: ports.EventTextDelta, Text: "lo"})
 	// accumulated into the current buffer, flushed on turn end
-	m.applyEvent(provider.Event{Kind: provider.EventTurnEnd})
+	m.applyEvent(ports.Event{Kind: ports.EventTurnEnd})
 	if len(m.log) != 1 || m.log[0] != "hello" {
 		t.Fatalf("log = %v, want [hello]", m.log)
 	}
@@ -28,8 +28,8 @@ func TestApplyEventTextDeltaAccumulates(t *testing.T) {
 
 func TestApplyEventToolCallFlushesTextAndRenders(t *testing.T) {
 	m := newTestModel()
-	m.applyEvent(provider.Event{Kind: provider.EventTextDelta, Text: "thinking..."})
-	m.applyEvent(provider.Event{Kind: provider.EventToolCallStart, Call: &provider.ToolCall{
+	m.applyEvent(ports.Event{Kind: ports.EventTextDelta, Text: "thinking..."})
+	m.applyEvent(ports.Event{Kind: ports.EventToolCallStart, Call: &ports.ToolCall{
 		ID: "c1", Name: "echo", Input: []byte(`{"text":"hi"}`),
 	}})
 	// text flushed before the tool line
@@ -46,7 +46,7 @@ func TestApplyEventToolCallFlushesTextAndRenders(t *testing.T) {
 
 func TestApplyEventThinkingRendersDim(t *testing.T) {
 	m := newTestModel()
-	m.applyEvent(provider.Event{Kind: provider.EventThinkingDelta, Text: "hm"})
+	m.applyEvent(ports.Event{Kind: ports.EventThinkingDelta, Text: "hm"})
 	if len(m.log) != 1 {
 		t.Fatalf("log = %v", m.log)
 	}
@@ -58,7 +58,7 @@ func TestApplyEventThinkingRendersDim(t *testing.T) {
 
 func TestApplyEventErrorRecords(t *testing.T) {
 	m := newTestModel()
-	m.applyEvent(provider.Event{Kind: provider.EventError, Err: errBoom})
+	m.applyEvent(ports.Event{Kind: ports.EventError, Err: errBoom})
 	if m.err == nil || m.err.Error() != "boom" {
 		t.Fatalf("err = %v", m.err)
 	}
@@ -108,18 +108,18 @@ func TestSubmitAppendsUserAndStartsBusy(t *testing.T) {
 	if len(m.history) != 2 {
 		t.Fatalf("history = %v, want [user, assistant]", m.history)
 	}
-	if m.history[0].Role != provider.RoleUser || m.history[0].Blocks[0].Text != "hello there" {
+	if m.history[0].Role != ports.RoleUser || m.history[0].Blocks[0].Text != "hello there" {
 		t.Fatalf("history[0] = %+v, want user/hello there", m.history[0])
 	}
-	if m.history[1].Role != provider.RoleAssistant || m.history[1].Blocks[0].Text != "ack" {
+	if m.history[1].Role != ports.RoleAssistant || m.history[1].Blocks[0].Text != "ack" {
 		t.Fatalf("history[1] = %+v, want assistant/ack", m.history[1])
 	}
 }
 
 func TestApplyToolResultRendersDiff(t *testing.T) {
 	m := newTestModel()
-	m.applyToolResult(provider.ToolCall{Name: "edit"}, provider.Block{
-		Kind:           provider.BlockToolResult,
+	m.applyToolResult(ports.ToolCall{Name: "edit"}, ports.Block{
+		Kind:           ports.BlockToolResult,
 		ToolResultText: "- old\n+ new\n",
 	})
 	if len(m.log) != 1 || m.log[0] != "- old\n+ new" {
@@ -129,8 +129,8 @@ func TestApplyToolResultRendersDiff(t *testing.T) {
 
 func TestApplyToolResultError(t *testing.T) {
 	m := newTestModel()
-	m.applyToolResult(provider.ToolCall{Name: "bash"}, provider.Block{
-		Kind:            provider.BlockToolResult,
+	m.applyToolResult(ports.ToolCall{Name: "bash"}, ports.Block{
+		Kind:            ports.BlockToolResult,
 		ToolResultText:  "denied by policy",
 		ToolResultError: true,
 	})
@@ -141,7 +141,7 @@ func TestApplyToolResultError(t *testing.T) {
 
 func TestPromptMsgSetsPending(t *testing.T) {
 	m := newTestModel()
-	mm, _ := m.Update(promptMsg{call: provider.ToolCall{Name: "bash"}})
+	mm, _ := m.Update(promptMsg{call: ports.ToolCall{Name: "bash"}})
 	m = mm.(Model)
 	if m.pending == nil || m.pending.Name != "bash" {
 		t.Fatalf("pending not set: %+v", m.pending)
@@ -151,7 +151,7 @@ func TestPromptMsgSetsPending(t *testing.T) {
 func TestAnswerPromptSendsAndClears(t *testing.T) {
 	m := newTestModel()
 	m.answer = make(chan bool, 1)
-	m.pending = &provider.ToolCall{Name: "bash"}
+	m.pending = &ports.ToolCall{Name: "bash"}
 	m = m.answerPrompt(true)
 	select {
 	case got := <-m.answer:
@@ -168,7 +168,7 @@ func TestAnswerPromptSendsAndClears(t *testing.T) {
 
 func TestAnswerPromptWithoutChannelNoPanic(t *testing.T) {
 	m := newTestModel()
-	m.pending = &provider.ToolCall{Name: "x"}
+	m.pending = &ports.ToolCall{Name: "x"}
 	// answer is nil — must not panic, must clear pending.
 	m = m.answerPrompt(false)
 	if m.pending != nil {

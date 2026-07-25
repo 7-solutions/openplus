@@ -8,7 +8,8 @@ import (
 	"testing"
 
 	"github.com/7solutions/openplus/internal/improve"
-	"github.com/7solutions/openplus/internal/provider"
+	"github.com/7solutions/openplus/internal/ports"
+	portsfake "github.com/7solutions/openplus/internal/ports/providerfake"
 )
 
 // run dispatches and fails the test on a dispatch error.
@@ -241,13 +242,13 @@ func dreamSession(t *testing.T) *Session {
 	if err != nil {
 		t.Fatalf("Assemble: %v", err)
 	}
-	s.Provider = &provider.Fake{Scripts: [][]provider.Event{{
-		{Kind: provider.EventTextDelta, Text: "- the build is cgo-free by policy\n- tests run offline\n"},
-		{Kind: provider.EventTurnEnd},
+	s.Provider = &portsfake.Fake{Scripts: [][]ports.Event{{
+		{Kind: ports.EventTextDelta, Text: "- the build is cgo-free by policy\n- tests run offline\n"},
+		{Kind: ports.EventTurnEnd},
 	}}}
-	s.History = []provider.Message{{
-		Role:   provider.RoleUser,
-		Blocks: []provider.Block{{Kind: provider.BlockText, Text: "we fixed the build"}},
+	s.History = []ports.Message{{
+		Role:   ports.RoleUser,
+		Blocks: []ports.Block{{Kind: ports.BlockText, Text: "we fixed the build"}},
 	}}
 	return s
 }
@@ -302,9 +303,9 @@ func TestCmdDreamNeverRewritesExisting(t *testing.T) {
 // TestCmdDreamEmptyExtractionIsHonest is the spec scenario.
 func TestCmdDreamEmptyExtractionIsHonest(t *testing.T) {
 	s := dreamSession(t)
-	s.Provider = &provider.Fake{Scripts: [][]provider.Event{{
-		{Kind: provider.EventTextDelta, Text: "I found nothing worth keeping."},
-		{Kind: provider.EventTurnEnd},
+	s.Provider = &portsfake.Fake{Scripts: [][]ports.Event{{
+		{Kind: ports.EventTextDelta, Text: "I found nothing worth keeping."},
+		{Kind: ports.EventTurnEnd},
 	}}}
 
 	out := run(t, s, "/dream")

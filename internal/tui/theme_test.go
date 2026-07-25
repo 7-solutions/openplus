@@ -10,7 +10,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/7solutions/openplus/internal/provider"
+	"github.com/7solutions/openplus/internal/ports"
 )
 
 // T-1712: ContrastRatio is the WCAG relative-luminance contrast between two hex
@@ -161,7 +161,7 @@ func TestViewRendersUnderNoColor(t *testing.T) {
 	m.h = 40
 	m.w = 80
 	m.busy = true
-	m.pending = &provider.ToolCall{Name: "bash", Input: []byte("{}")}
+	m.pending = &ports.ToolCall{Name: "bash", Input: []byte("{}")}
 	out := m.View()
 	for _, want := range []string{"working", "allow bash"} {
 		if !strings.Contains(out, want) {

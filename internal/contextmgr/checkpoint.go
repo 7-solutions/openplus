@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/7solutions/openplus/internal/provider"
+	"github.com/7solutions/openplus/internal/ports"
 )
 
 // DefaultHighWater is the fraction of the context window at which a checkpoint
@@ -32,7 +32,7 @@ type Checkpoint struct {
 	// Tasks is the task tree, which must survive the boundary intact (T-063).
 	Tasks TaskTree
 	// Recent holds the messages retained verbatim across the cut.
-	Recent []provider.Message
+	Recent []ports.Message
 }
 
 // Checkpointer writes and reads checkpoint.md and decides when the live context
@@ -119,9 +119,9 @@ func (c Checkpointer) Read() (Checkpoint, error) {
 		if text == "" {
 			continue
 		}
-		cp.Recent = append(cp.Recent, provider.Message{
-			Role:   provider.RoleUser,
-			Blocks: []provider.Block{{Kind: provider.BlockText, Text: text}},
+		cp.Recent = append(cp.Recent, ports.Message{
+			Role:   ports.RoleUser,
+			Blocks: []ports.Block{{Kind: ports.BlockText, Text: text}},
 		})
 	}
 	return cp, nil
@@ -132,7 +132,7 @@ func (c Checkpointer) Read() (Checkpoint, error) {
 // the checkpoint summary, retrieved memory, and retained recent messages.
 // recent overrides the checkpoint's digest when non-nil (live messages are
 // better than a digest of them).
-func (c Checkpointer) Reconstruct(system string, memory []string, recent []provider.Message) (Input, error) {
+func (c Checkpointer) Reconstruct(system string, memory []string, recent []ports.Message) (Input, error) {
 	cp, err := c.Read()
 	if err != nil {
 		return Input{}, err
@@ -175,15 +175,15 @@ func section(body, header, next string) string {
 
 // flattenBlocks renders a message's blocks as a single line for the checkpoint
 // digest.
-func flattenBlocks(blocks []provider.Block) string {
+func flattenBlocks(blocks []ports.Block) string {
 	parts := make([]string, 0, len(blocks))
 	for _, b := range blocks {
 		switch b.Kind {
-		case provider.BlockText, provider.BlockThinking:
+		case ports.BlockText, ports.BlockThinking:
 			parts = append(parts, b.Text)
-		case provider.BlockToolCall:
+		case ports.BlockToolCall:
 			parts = append(parts, fmt.Sprintf("%s(%s)", b.ToolName, b.ToolInput))
-		case provider.BlockToolResult:
+		case ports.BlockToolResult:
 			parts = append(parts, b.ToolResultText)
 		}
 	}

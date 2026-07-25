@@ -14,7 +14,7 @@ import (
 	"sort"
 
 	"github.com/7solutions/openplus/internal/glob"
-	"github.com/7solutions/openplus/internal/provider"
+	"github.com/7solutions/openplus/internal/ports"
 )
 
 type Decision int
@@ -27,7 +27,7 @@ const (
 
 // Gate is the port the agent loop calls before executing any tool call.
 type Gate interface {
-	Permit(ctx context.Context, call provider.ToolCall) (Decision, error)
+	Permit(ctx context.Context, call ports.ToolCall) (Decision, error)
 }
 
 // AllowAll is a scaffold gate that permits everything. Equivalent to
@@ -35,7 +35,7 @@ type Gate interface {
 // in tests and local scaffolding, never as a shipped default.
 type AllowAll struct{}
 
-func (AllowAll) Permit(ctx context.Context, call provider.ToolCall) (Decision, error) {
+func (AllowAll) Permit(ctx context.Context, call ports.ToolCall) (Decision, error) {
 	return Allow, nil
 }
 
@@ -45,7 +45,7 @@ type DenyList struct {
 	Denied map[string]bool
 }
 
-func (d DenyList) Permit(ctx context.Context, call provider.ToolCall) (Decision, error) {
+func (d DenyList) Permit(ctx context.Context, call ports.ToolCall) (Decision, error) {
 	if d.Denied[call.Name] {
 		return Deny, nil
 	}
@@ -71,7 +71,7 @@ type Rules struct {
 // Permit evaluates List against the call, last-match-wins, falling back to
 // Default. It never returns an error for the rule match itself; Prompting
 // (below) layers prompt resolution on top.
-func (r Rules) Permit(ctx context.Context, call provider.ToolCall) (Decision, error) {
+func (r Rules) Permit(ctx context.Context, call ports.ToolCall) (Decision, error) {
 	path := extractPath(call.Input)
 	result := r.Default
 	for _, rule := range r.List {
@@ -186,7 +186,7 @@ func sortedKeys(m map[string]string) []string {
 // Prompter asks an operator to approve an Ask decision. The context carries the
 // forced-ask timeout (deadline). Implementations are UI seams (T-031 TUI).
 type Prompter interface {
-	Ask(ctx context.Context, call provider.ToolCall) (bool, error)
+	Ask(ctx context.Context, call ports.ToolCall) (bool, error)
 }
 
 // Prompting wraps a Rules engine with a Prompter, resolving Ask decisions
@@ -199,7 +199,7 @@ type Prompting struct {
 
 // Permit delegates to Rules; on Ask it calls Prompter (if present) within ctx.
 // A prompter denial or a ctx timeout yields Deny + the wrapped error.
-func (p Prompting) Permit(ctx context.Context, call provider.ToolCall) (Decision, error) {
+func (p Prompting) Permit(ctx context.Context, call ports.ToolCall) (Decision, error) {
 	d, err := p.Rules.Permit(ctx, call)
 	if err != nil {
 		return Deny, err
@@ -230,7 +230,7 @@ type Skip struct {
 
 // Permit returns the rule decision with Ask promoted to Allow, over an
 // allow-all base.
-func (s Skip) Permit(ctx context.Context, call provider.ToolCall) (Decision, error) {
+func (s Skip) Permit(ctx context.Context, call ports.ToolCall) (Decision, error) {
 	d, err := s.Rules.Permit(ctx, call)
 	if err != nil {
 		return Deny, err

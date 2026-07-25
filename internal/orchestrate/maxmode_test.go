@@ -10,7 +10,8 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/7solutions/openplus/internal/provider"
+	"github.com/7solutions/openplus/internal/ports"
+	portsfake "github.com/7solutions/openplus/internal/ports/providerfake"
 )
 
 // textProvider streams one fixed reply per call, cycling through replies, and
@@ -20,50 +21,50 @@ type textProvider struct {
 
 	mu       sync.Mutex
 	calls    int
-	inFlight int32
-	peak     int32
+	inFlight atomic.Int32
+	peak     atomic.Int32
 	// block, when non-nil, holds every call until closed — that keeps
 	// generations overlapping long enough for the peak to be meaningful.
 	block chan struct{}
 }
 
-func (p *textProvider) Stream(ctx context.Context, req provider.Request) (<-chan provider.Event, error) {
+func (p *textProvider) Stream(ctx context.Context, req ports.Request) (<-chan ports.Event, error) {
 	p.mu.Lock()
 	i := p.calls
 	p.calls++
 	p.mu.Unlock()
 
-	n := atomic.AddInt32(&p.inFlight, 1)
+	n := p.inFlight.Add(1)
 	for {
-		peak := atomic.LoadInt32(&p.peak)
-		if n <= peak || atomic.CompareAndSwapInt32(&p.peak, peak, n) {
+		peak := p.peak.Load()
+		if n <= peak || p.peak.CompareAndSwap(peak, n) {
 			break
 		}
 	}
 	if p.block != nil {
 		<-p.block
 	}
-	atomic.AddInt32(&p.inFlight, -1)
+	p.inFlight.Add(-1)
 
 	reply := ""
 	if len(p.replies) > 0 {
 		reply = p.replies[i%len(p.replies)]
 	}
 
-	ch := make(chan provider.Event, 2)
-	ch <- provider.Event{Kind: provider.EventTextDelta, Text: reply}
-	ch <- provider.Event{Kind: provider.EventTurnEnd}
+	ch := make(chan ports.Event, 2)
+	ch <- ports.Event{Kind: ports.EventTextDelta, Text: reply}
+	ch <- ports.Event{Kind: ports.EventTurnEnd}
 	close(ch)
 	return ch, nil
 }
 
 // askProvider is a request for one text generation, used to build a Request.
-func askProvider(text string) provider.Request {
-	return provider.Request{
+func askProvider(text string) ports.Request {
+	return ports.Request{
 		Model: "fake/fake",
-		Messages: []provider.Message{{
-			Role:   provider.RoleUser,
-			Blocks: []provider.Block{{Kind: provider.BlockText, Text: text}},
+		Messages: []ports.Message{{
+			Role:   ports.RoleUser,
+			Blocks: []ports.Block{{Kind: ports.BlockText, Text: text}},
 		}},
 	}
 }
@@ -96,14 +97,14 @@ func TestSamplerSampleReturnsNCandidates(t *testing.T) {
 // T-1610: sampling is tool-free — a candidate must not act, only answer.
 func TestSamplerStripsTools(t *testing.T) {
 	var sawTools bool
-	p := &rankProvider{onRequest: func(req provider.Request) {
+	p := &rankProvider{onRequest: func(req ports.Request) {
 		if len(req.Tools) > 0 {
 			sawTools = true
 		}
 	}}
 	s := Sampler{Provider: p}
 	req := askProvider("q")
-	req.Tools = []provider.ToolSchema{{Name: "bash"}}
+	req.Tools = []ports.ToolSchema{{Name: "bash"}}
 
 	if _, err := s.Sample(context.Background(), req, 2); err != nil {
 		t.Fatalf("Sample: %v", err)
@@ -144,7 +145,7 @@ func TestSamplerBoundedParallelism(t *testing.T) {
 	}()
 
 	// Let the first slots fill, then release everything.
-	for atomic.LoadInt32(&p.inFlight) < 2 {
+	for p.inFlight.Load() < 2 {
 	}
 	close(block)
 	<-done
@@ -155,10 +156,10 @@ func TestSamplerBoundedParallelism(t *testing.T) {
 	if len(cands) != 6 {
 		t.Fatalf("got %d candidates, want 6", len(cands))
 	}
-	if peak := atomic.LoadInt32(&p.peak); peak > 2 {
+	if peak := p.peak.Load(); peak > 2 {
 		t.Errorf("peak concurrency %d exceeds MaxParallel 2", peak)
 	}
-	if left := atomic.LoadInt32(&p.inFlight); left != 0 {
+	if left := p.inFlight.Load(); left != 0 {
 		t.Errorf("%d generations still in flight after Sample returned", left)
 	}
 }
@@ -166,10 +167,10 @@ func TestSamplerBoundedParallelism(t *testing.T) {
 // T-1612: one failing generation still returns the others, with the failure
 // recorded on that candidate.
 func TestSamplerPartialFailure(t *testing.T) {
-	p := &provider.Fake{Scripts: [][]provider.Event{
-		{{Kind: provider.EventTextDelta, Text: "ok one"}, {Kind: provider.EventTurnEnd}},
-		{{Kind: provider.EventError, Err: errJudgeBoom}},
-		{{Kind: provider.EventTextDelta, Text: "ok three"}, {Kind: provider.EventTurnEnd}},
+	p := &portsfake.Fake{Scripts: [][]ports.Event{
+		{{Kind: ports.EventTextDelta, Text: "ok one"}, {Kind: ports.EventTurnEnd}},
+		{{Kind: ports.EventError, Err: errJudgeBoom}},
+		{{Kind: ports.EventTextDelta, Text: "ok three"}, {Kind: ports.EventTurnEnd}},
 	}}
 	s := Sampler{Provider: p}
 
@@ -205,15 +206,15 @@ func TestSamplerPartialFailure(t *testing.T) {
 
 // rankProvider inspects each Request and replies with fixed text.
 type rankProvider struct {
-	onRequest func(provider.Request)
+	onRequest func(ports.Request)
 	reply     string
 
 	mu    sync.Mutex
-	seen  []provider.Request
+	seen  []ports.Request
 	calls int
 }
 
-func (p *rankProvider) Stream(ctx context.Context, req provider.Request) (<-chan provider.Event, error) {
+func (p *rankProvider) Stream(ctx context.Context, req ports.Request) (<-chan ports.Event, error) {
 	p.mu.Lock()
 	p.seen = append(p.seen, req)
 	p.calls++
@@ -225,9 +226,9 @@ func (p *rankProvider) Stream(ctx context.Context, req provider.Request) (<-chan
 	if reply == "" {
 		reply = "text"
 	}
-	ch := make(chan provider.Event, 2)
-	ch <- provider.Event{Kind: provider.EventTextDelta, Text: reply}
-	ch <- provider.Event{Kind: provider.EventTurnEnd}
+	ch := make(chan ports.Event, 2)
+	ch <- ports.Event{Kind: ports.EventTextDelta, Text: reply}
+	ch <- ports.Event{Kind: ports.EventTurnEnd}
 	close(ch)
 	return ch, nil
 }
@@ -297,7 +298,7 @@ func TestRankerRejectsBadAnswer(t *testing.T) {
 	}
 }
 
-// T-1622: ranking needs candidates and a provider.
+// T-1622: ranking needs candidates and a ports.
 func TestRankerRejectsBadInput(t *testing.T) {
 	r := Ranker{Provider: &rankProvider{reply: "BEST: 0"}, Model: "fake/judge"}
 	if _, _, err := r.Rank(context.Background(), "q", nil); err == nil {
@@ -399,9 +400,9 @@ func TestMaxModeRankingFailureErrors(t *testing.T) {
 
 // T-1624: when every generation failed there is no winner to return.
 func TestMaxModeAllCandidatesFailed(t *testing.T) {
-	gen := &provider.Fake{Scripts: [][]provider.Event{
-		{{Kind: provider.EventError, Err: errJudgeBoom}},
-		{{Kind: provider.EventError, Err: errJudgeBoom}},
+	gen := &portsfake.Fake{Scripts: [][]ports.Event{
+		{{Kind: ports.EventError, Err: errJudgeBoom}},
+		{{Kind: ports.EventError, Err: errJudgeBoom}},
 	}}
 	judge := &rankProvider{reply: "BEST: 0"}
 	m := MaxMode{
@@ -454,7 +455,8 @@ func TestOrchestrateImportsNoProviderAdapter(t *testing.T) {
 		t.Fatalf("glob: %v", err)
 	}
 	fset := token.NewFileSet()
-	const neutral = `"github.com/7solutions/openplus/internal/provider"`
+	const neutral = `"github.com/7solutions/openplus/internal/ports"
+	portsfake "github.com/7solutions/openplus/internal/ports/providerfake"`
 	for _, f := range files {
 		if strings.HasSuffix(f, "_test.go") {
 			continue

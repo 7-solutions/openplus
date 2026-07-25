@@ -1,7 +1,7 @@
-// Package provider defines the provider-neutral domain model (ADR-0005).
-// The agent loop, tools, memory, and compose packages depend only on these
-// types — never on an Anthropic- or OpenAI-shaped type.
-package provider
+// Neutral provider model types (ADR-0005; change 0018). The agent loop, tools,
+// memory, and compose packages depend on these types — never on an Anthropic- or
+// OpenAI-shaped type.
+package ports
 
 import "context"
 

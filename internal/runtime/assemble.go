@@ -25,7 +25,8 @@ import (
 	"github.com/7solutions/openplus/internal/memory"
 	"github.com/7solutions/openplus/internal/orchestrate"
 	"github.com/7solutions/openplus/internal/policy"
-	"github.com/7solutions/openplus/internal/provider"
+	"github.com/7solutions/openplus/internal/ports"
+	portsfake "github.com/7solutions/openplus/internal/ports/providerfake"
 	selectadapter "github.com/7solutions/openplus/internal/provider/select"
 	"github.com/7solutions/openplus/internal/skills"
 	"github.com/7solutions/openplus/internal/tool"
@@ -96,9 +97,9 @@ type Session struct {
 	Config       *config.Config
 	SystemPrompt string
 
-	Provider    provider.Provider
+	Provider    ports.Provider
 	Tools       *tool.Registry
-	ToolSchemas []provider.ToolSchema
+	ToolSchemas []ports.ToolSchema
 
 	// Goal is the stop-condition text (Change 0007). Empty disables
 	// judging; Run then terminates when the agent's tool-call count hits
@@ -136,8 +137,8 @@ type Session struct {
 
 	// OnEvent and OnToolResult are the front-end render hooks, forwarded to the
 	// agent loop on every Run. Nil means no rendering (the non-interactive path).
-	OnEvent      func(provider.Event)
-	OnToolResult func(call provider.ToolCall, result provider.Block)
+	OnEvent      func(ports.Event)
+	OnToolResult func(call ports.ToolCall, result ports.Block)
 
 	// OnCheckpointError reports a failed checkpoint write. The turn itself
 	// succeeded, but the session is no longer durable, so the operator needs to
@@ -182,7 +183,7 @@ type Session struct {
 
 	// History accumulates this session's turns, so /dream has a transcript to
 	// extract from and /distill has runs to mine.
-	History []provider.Message
+	History []ports.Message
 	// Runs records each turn's tool sequence for /distill.
 	Runs []improve.Run
 
@@ -519,11 +520,11 @@ func buildCoordinator(root, backend string) orchestrate.Coordinator {
 }
 
 // toolSchemas converts a registry into the neutral schemas sent to the model.
-func toolSchemas(r *tool.Registry) []provider.ToolSchema {
+func toolSchemas(r *tool.Registry) []ports.ToolSchema {
 	all := r.All()
-	out := make([]provider.ToolSchema, 0, len(all))
+	out := make([]ports.ToolSchema, 0, len(all))
 	for _, t := range all {
-		out = append(out, provider.ToolSchema{
+		out = append(out, ports.ToolSchema{
 			Name:        t.Name(),
 			Description: t.Description(),
 			InputSchema: t.Schema(),
@@ -534,11 +535,11 @@ func toolSchemas(r *tool.Registry) []provider.ToolSchema {
 
 // fakeProvider is the scripted offline provider used by --fake: it answers one
 // turn with text and stops, which is enough to prove the wiring end to end.
-func fakeProvider() *provider.Fake {
-	return &provider.Fake{Scripts: [][]provider.Event{
+func fakeProvider() *portsfake.Fake {
+	return &portsfake.Fake{Scripts: [][]ports.Event{
 		{
-			{Kind: provider.EventTextDelta, Text: "openplus runtime is wired (fake provider)"},
-			{Kind: provider.EventTurnEnd},
+			{Kind: ports.EventTextDelta, Text: "openplus runtime is wired (fake provider)"},
+			{Kind: ports.EventTurnEnd},
 		},
 	}}
 }

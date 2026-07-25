@@ -1,6 +1,6 @@
 package contextmgr
 
-import "github.com/7solutions/openplus/internal/provider"
+import "github.com/7solutions/openplus/internal/ports"
 
 // Input is everything that could enter the context window for one turn, before
 // budgeting. Sections are listed in ADR-0008 priority order.
@@ -18,7 +18,7 @@ type Input struct {
 	// (ADR-0003).
 	Memory []string
 	// Recent holds retained recent messages in chronological order.
-	Recent []provider.Message
+	Recent []ports.Message
 }
 
 // Output is the budgeted context: the same sections, truncated to fit.
@@ -28,7 +28,7 @@ type Output struct {
 	Progress   string
 	Checkpoint string
 	Memory     []string
-	Recent     []provider.Message
+	Recent     []ports.Message
 
 	// Used is the estimated token count of the retained content.
 	Used int
@@ -126,7 +126,7 @@ func (b Budgeter) Fit(in Input) Output {
 
 	// 5. Retained recent messages — newest first (recency wins), then restored
 	// to chronological order so the transcript still reads correctly.
-	kept := make([]provider.Message, 0, len(in.Recent))
+	kept := make([]ports.Message, 0, len(in.Recent))
 	for i := len(in.Recent) - 1; i >= 0; i-- {
 		cost := CountMessages(tk, in.Recent[i:i+1])
 		if cost > remaining {
@@ -151,7 +151,7 @@ func countStrings(tk Tokenizer, ss []string) int {
 	return total
 }
 
-func reverse(msgs []provider.Message) {
+func reverse(msgs []ports.Message) {
 	for i, j := 0, len(msgs)-1; i < j; i, j = i+1, j-1 {
 		msgs[i], msgs[j] = msgs[j], msgs[i]
 	}

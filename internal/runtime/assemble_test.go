@@ -11,7 +11,8 @@ import (
 
 	"github.com/7solutions/openplus/internal/embed"
 	"github.com/7solutions/openplus/internal/policy"
-	"github.com/7solutions/openplus/internal/provider"
+	"github.com/7solutions/openplus/internal/ports"
+	portsfake "github.com/7solutions/openplus/internal/ports/providerfake"
 	"github.com/7solutions/openplus/internal/provider/anthropic"
 	"github.com/7solutions/openplus/internal/provider/openaicompat"
 )
@@ -113,8 +114,8 @@ func TestAssembleFakeOptionNeedsNoConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Assemble with Fake: %v", err)
 	}
-	if _, ok := s.Provider.(*provider.Fake); !ok {
-		t.Fatalf("Provider = %T, want *provider.Fake", s.Provider)
+	if _, ok := s.Provider.(*portsfake.Fake); !ok {
+		t.Fatalf("Provider = %T, want *portsfake.Fake", s.Provider)
 	}
 }
 
@@ -195,7 +196,7 @@ func TestAssembleGateFromConfigPermissions(t *testing.T) {
 		t.Fatalf("Assemble: %v", err)
 	}
 	// the rule table says Ask, straight from permission.bash
-	got, err := s.Rules.Permit(t.Context(), provider.ToolCall{Name: "bash", Input: []byte(`{}`)})
+	got, err := s.Rules.Permit(t.Context(), ports.ToolCall{Name: "bash", Input: []byte(`{}`)})
 	if err != nil {
 		t.Fatalf("Permit: %v", err)
 	}
@@ -203,13 +204,13 @@ func TestAssembleGateFromConfigPermissions(t *testing.T) {
 		t.Fatalf("bash rule = %v, want Ask (from permission.bash)", got)
 	}
 	// a tool with no rule falls through to allow
-	got, _ = s.Rules.Permit(t.Context(), provider.ToolCall{Name: "read", Input: []byte(`{}`)})
+	got, _ = s.Rules.Permit(t.Context(), ports.ToolCall{Name: "read", Input: []byte(`{}`)})
 	if got != policy.Allow {
 		t.Errorf("read rule = %v, want Allow", got)
 	}
 
 	// With no prompter wired, Ask must degrade to Deny rather than silently run.
-	got, _ = s.Gate.Permit(t.Context(), provider.ToolCall{Name: "bash", Input: []byte(`{}`)})
+	got, _ = s.Gate.Permit(t.Context(), ports.ToolCall{Name: "bash", Input: []byte(`{}`)})
 	if got != policy.Deny {
 		t.Errorf("unwired Ask = %v, want Deny (safe default)", got)
 	}
@@ -225,7 +226,7 @@ func TestSetPrompterMakesAskInteractive(t *testing.T) {
 	}
 	s.SetPrompter(approvingPrompter{})
 
-	got, err := s.Gate.Permit(t.Context(), provider.ToolCall{Name: "bash", Input: []byte(`{}`)})
+	got, err := s.Gate.Permit(t.Context(), ports.ToolCall{Name: "bash", Input: []byte(`{}`)})
 	if err != nil {
 		t.Fatalf("Permit: %v", err)
 	}
@@ -248,7 +249,7 @@ func TestSetPrompterUnderSkipIsNoop(t *testing.T) {
 	}
 	s.SetPrompter(refusingPrompter{})
 	// under skip, an ask rule is allowed without consulting anything
-	got, _ := s.Gate.Permit(t.Context(), provider.ToolCall{Name: "bash", Input: []byte(`{}`)})
+	got, _ := s.Gate.Permit(t.Context(), ports.ToolCall{Name: "bash", Input: []byte(`{}`)})
 	if got != policy.Allow {
 		t.Fatalf("skip-mode ask = %v, want Allow", got)
 	}
@@ -267,12 +268,12 @@ func TestAssembleSkipPermissionsKeepsExplicitDenials(t *testing.T) {
 		t.Fatalf("Assemble: %v", err)
 	}
 	// explicit deny survives the skip flag
-	got, _ := s.Gate.Permit(t.Context(), provider.ToolCall{Name: "bash", Input: []byte(`{}`)})
+	got, _ := s.Gate.Permit(t.Context(), ports.ToolCall{Name: "bash", Input: []byte(`{}`)})
 	if got != policy.Deny {
 		t.Errorf("bash decision = %v, want Deny even with skip", got)
 	}
 	// an ask rule becomes allow (no prompting under skip)
-	got, _ = s.Gate.Permit(t.Context(), provider.ToolCall{Name: "write", Input: []byte(`{}`)})
+	got, _ = s.Gate.Permit(t.Context(), ports.ToolCall{Name: "write", Input: []byte(`{}`)})
 	if got != policy.Allow {
 		t.Errorf("write decision = %v, want Allow under skip", got)
 	}
@@ -360,11 +361,11 @@ func TestAssembleMissingProjectRootErrors(t *testing.T) {
 // approvingPrompter approves every Ask; refusingPrompter refuses.
 type approvingPrompter struct{}
 
-func (approvingPrompter) Ask(context.Context, provider.ToolCall) (bool, error) { return true, nil }
+func (approvingPrompter) Ask(context.Context, ports.ToolCall) (bool, error) { return true, nil }
 
 type refusingPrompter struct{}
 
-func (refusingPrompter) Ask(context.Context, provider.ToolCall) (bool, error) { return false, nil }
+func (refusingPrompter) Ask(context.Context, ports.ToolCall) (bool, error) { return false, nil }
 
 func TestSessionCloseIsSafeWithoutMemory(t *testing.T) {
 	s, err := Assemble(project(t, ""), Options{Fake: true})
@@ -515,8 +516,8 @@ func TestAssembleEnvFakeOverridesFalse(t *testing.T) {
 		t.Fatalf("Assemble: %v", err)
 	}
 	t.Cleanup(func() { _ = s.Close() })
-	if _, ok := s.Provider.(*provider.Fake); !ok {
-		t.Fatalf("Provider = %T, want *provider.Fake (OPENPLUS_FAKE=1 must win)", s.Provider)
+	if _, ok := s.Provider.(*portsfake.Fake); !ok {
+		t.Fatalf("Provider = %T, want *portsfake.Fake (OPENPLUS_FAKE=1 must win)", s.Provider)
 	}
 }
 

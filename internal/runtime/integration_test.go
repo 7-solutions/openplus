@@ -21,7 +21,8 @@ import (
 
 	"github.com/7solutions/openplus/internal/orchestrate"
 	"github.com/7solutions/openplus/internal/policy"
-	"github.com/7solutions/openplus/internal/provider"
+	"github.com/7solutions/openplus/internal/ports"
+	portsfake "github.com/7solutions/openplus/internal/ports/providerfake"
 	"github.com/7solutions/openplus/internal/tool"
 )
 
@@ -203,14 +204,14 @@ func TestIntegrationPermissionDenyStopsExecution(t *testing.T) {
 	t.Cleanup(func() { _ = s.Close() })
 
 	// Replace the session's Provider with a Fake that issues a bash call.
-	s.Provider = &provider.Fake{Scripts: [][]provider.Event{
+	s.Provider = &portsfake.Fake{Scripts: [][]ports.Event{
 		{
-			{Kind: provider.EventToolCallStart, Call: &provider.ToolCall{
+			{Kind: ports.EventToolCallStart, Call: &ports.ToolCall{
 				ID: "call_1", Name: "bash", Input: []byte(`{}`),
 			}},
-			{Kind: provider.EventTurnEnd},
+			{Kind: ports.EventTurnEnd},
 		},
-		{{Kind: provider.EventTurnEnd}},
+		{{Kind: ports.EventTurnEnd}},
 	}}
 
 	// Wire a permission rule that denies bash. We re-build the gate via the
@@ -228,7 +229,7 @@ func TestIntegrationPermissionDenyStopsExecution(t *testing.T) {
 
 	// Register the counting bash tool.
 	s.Tools = tool.NewRegistry(bash)
-	s.ToolSchemas = []provider.ToolSchema{{
+	s.ToolSchemas = []ports.ToolSchema{{
 		Name:        bash.Name(),
 		Description: bash.Description(),
 		InputSchema: bash.Schema(),
@@ -252,11 +253,11 @@ func TestIntegrationPermissionDenyStopsExecution(t *testing.T) {
 	// the last-but-one message.
 	var found bool
 	for _, m := range hist {
-		if m.Role != provider.RoleUser {
+		if m.Role != ports.RoleUser {
 			continue
 		}
 		for _, b := range m.Blocks {
-			if b.Kind != provider.BlockToolResult || b.ToolResultForID != "call_1" {
+			if b.Kind != ports.BlockToolResult || b.ToolResultForID != "call_1" {
 				continue
 			}
 			if !b.ToolResultError {
@@ -324,12 +325,12 @@ func TestIntegrationFakeSmokeEndToEnd(t *testing.T) {
 	if len(hist) < 2 {
 		t.Fatalf("history = %d messages, want >= 2 (user + assistant)", len(hist))
 	}
-	if hist[0].Role != provider.RoleUser {
+	if hist[0].Role != ports.RoleUser {
 		t.Errorf("history[0] = %+v, want RoleUser", hist[0])
 	}
 	foundAssistant := false
 	for _, m := range hist {
-		if m.Role == provider.RoleAssistant {
+		if m.Role == ports.RoleAssistant {
 			foundAssistant = true
 			break
 		}
@@ -352,15 +353,15 @@ func TestIntegrationFakeSmokeEndToEnd(t *testing.T) {
 
 // judgeSays returns a scripted provider whose Stream calls return
 // the given verdict replies in order (one per Evaluate call).
-func judgeSays(replies ...string) *provider.Fake {
-	scripts := make([][]provider.Event, len(replies))
+func judgeSays(replies ...string) *portsfake.Fake {
+	scripts := make([][]ports.Event, len(replies))
 	for i, reply := range replies {
-		scripts[i] = []provider.Event{
-			{Kind: provider.EventTextDelta, Text: reply},
-			{Kind: provider.EventTurnEnd},
+		scripts[i] = []ports.Event{
+			{Kind: ports.EventTextDelta, Text: reply},
+			{Kind: ports.EventTurnEnd},
 		}
 	}
-	return &provider.Fake{Scripts: scripts}
+	return &portsfake.Fake{Scripts: scripts}
 }
 
 // TestGoalAbsentSkipsJudge (T-440): with Goal empty and Judge nil,
@@ -508,11 +509,11 @@ func TestGoalJudgeRespectsMaxIterations(t *testing.T) {
 // judgeRecordingProvider wraps a scripted Fake with an atomic counter.
 // The counter increments every time Stream is called.
 type judgeRecordingProvider struct {
-	inner *provider.Fake
+	inner *portsfake.Fake
 	calls *atomic.Int32
 }
 
-func (j *judgeRecordingProvider) Stream(ctx context.Context, req provider.Request) (<-chan provider.Event, error) {
+func (j *judgeRecordingProvider) Stream(ctx context.Context, req ports.Request) (<-chan ports.Event, error) {
 	j.calls.Add(1)
 	return j.inner.Stream(ctx, req)
 }

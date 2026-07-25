@@ -15,14 +15,14 @@ import (
 	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/7solutions/openplus/internal/provider"
+	"github.com/7solutions/openplus/internal/ports"
 )
 
 // Runner drives one turn to completion. The runtime's Session implements it; the
 // TUI depends on this seam rather than on the agent loop, so context assembly
 // (memory, skills, budgeting) stays outside the front-end.
 type Runner interface {
-	Run(ctx context.Context, input string, history []provider.Message) ([]provider.Message, error)
+	Run(ctx context.Context, input string, history []ports.Message) ([]ports.Message, error)
 }
 
 // Dispatcher routes slash commands locally, without a model round-trip. A Runner
@@ -36,19 +36,19 @@ type Dispatcher interface {
 
 var errBoom = errors.New("boom")
 
-// StreamMsg wraps one streamed provider.Event (sent via program.Send).
-type StreamMsg provider.Event
+// StreamMsg wraps one streamed ports.Event (sent via program.Send).
+type StreamMsg ports.Event
 
 // ToolResultMsg carries a tool call + its neutral result block (sent via
 // program.Send from the agent's OnToolResult hook).
 type ToolResultMsg struct {
-	Call   provider.ToolCall
-	Result provider.Block
+	Call   ports.ToolCall
+	Result ports.Block
 }
 
 // promptMsg asks the user to approve a tool call (sent by the Prompter).
 type promptMsg struct {
-	call provider.ToolCall
+	call ports.ToolCall
 }
 
 // NoticeMsg is a session-level event the user needs to see but that is not
@@ -63,7 +63,7 @@ type Model struct {
 	runner  Runner
 	system  string
 	theme   Palette
-	history []provider.Message
+	history []ports.Message
 
 	input textarea.Model
 	log   []string        // flushed, rendered lines
@@ -75,7 +75,7 @@ type Model struct {
 	// pendingInput holds the submitted text until runTurn reads it.
 	pendingInput string
 	// pending is non-nil while a permission prompt is shown.
-	pending *provider.ToolCall
+	pending *ports.ToolCall
 	// answer carries prompt replies back to the Prompter.
 	answer chan bool
 }
@@ -130,7 +130,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case StreamMsg:
-		m.applyEvent(provider.Event(msg))
+		m.applyEvent(ports.Event(msg))
 		return m, nil
 
 	case ToolResultMsg:
@@ -211,7 +211,7 @@ func (m Model) answerPrompt(approved bool) Model {
 
 // turnDoneMsg is sent when an agent.Run call returns.
 type turnDoneMsg struct {
-	history []provider.Message
+	history []ports.Message
 	err     error
 }
 
@@ -267,21 +267,21 @@ func (m *Model) dispatch() bool {
 }
 
 // applyEvent renders one streamed Event into the model (tested seam).
-func (m *Model) applyEvent(ev provider.Event) {
+func (m *Model) applyEvent(ev ports.Event) {
 	switch ev.Kind {
-	case provider.EventTextDelta:
+	case ports.EventTextDelta:
 		m.cur.WriteString(ev.Text)
-	case provider.EventThinkingDelta:
+	case ports.EventThinkingDelta:
 		m.flushText()
 		m.log = append(m.log, "(thinking) "+ev.Text)
-	case provider.EventToolCallStart:
+	case ports.EventToolCallStart:
 		m.flushText()
 		if ev.Call != nil {
 			m.log = append(m.log, fmt.Sprintf("%s(%s)", ev.Call.Name, ev.Call.Input))
 		}
-	case provider.EventTurnEnd:
+	case ports.EventTurnEnd:
 		m.flushText()
-	case provider.EventError:
+	case ports.EventError:
 		m.err = ev.Err
 		m.log = append(m.log, "error: "+ev.Err.Error())
 	}
@@ -289,7 +289,7 @@ func (m *Model) applyEvent(ev provider.Event) {
 
 // applyToolResult renders a completed tool call's result (tested seam). Edit
 // results are unified diffs.
-func (m *Model) applyToolResult(call provider.ToolCall, res provider.Block) {
+func (m *Model) applyToolResult(call ports.ToolCall, res ports.Block) {
 	m.flushText()
 	if res.ToolResultError {
 		m.log = append(m.log, fmt.Sprintf("✗ %s: %s", call.Name, res.ToolResultText))

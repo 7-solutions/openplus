@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/7solutions/openplus/internal/config"
-	"github.com/7solutions/openplus/internal/provider"
+	"github.com/7solutions/openplus/internal/ports"
 	"github.com/7solutions/openplus/internal/provider/anthropic"
 	"github.com/7solutions/openplus/internal/provider/openaicompat"
 )
@@ -89,11 +89,11 @@ func TestSelectBadModelStringErrors(t *testing.T) {
 	}
 }
 
-// fakeProv is a test-only provider.Provider capturing the options the factory
+// fakeProv is a test-only ports.Provider capturing the options the factory
 // received, used to prove Register wires resolved config into the factory.
 type fakeProv struct{ apiKey string }
 
-func (f fakeProv) Stream(context.Context, provider.Request) (<-chan provider.Event, error) {
+func (f fakeProv) Stream(context.Context, ports.Request) (<-chan ports.Event, error) {
 	return nil, errors.New("not implemented")
 }
 
@@ -102,7 +102,7 @@ func (f fakeProv) Stream(context.Context, provider.Request) (<-chan provider.Eve
 // factory receives the resolved provider options.
 func TestSelectCustomFactoryRegistration(t *testing.T) {
 	const prefix = "test-fake-provider"
-	Register(prefix, func(p config.Provider) provider.Provider {
+	Register(prefix, func(p config.Provider) ports.Provider {
 		return fakeProv{apiKey: p.APIKey}
 	})
 	t.Cleanup(func() { Unregister(prefix) })
@@ -122,7 +122,7 @@ func TestSelectCustomFactoryRegistration(t *testing.T) {
 }
 
 // TestSelectReturnsProviderPort proves whatever Select returns satisfies the
-// provider.Provider interface — no concrete adapter type escapes the selector
+// ports.Provider interface — no concrete adapter type escapes the selector
 // in its contract.
 func TestSelectReturnsProviderPort(t *testing.T) {
 	in := providers(config.Provider{ID: "anthropic", APIKey: "k"})
@@ -130,7 +130,7 @@ func TestSelectReturnsProviderPort(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Select: %v", err)
 	}
-	var _ provider.Provider = got
+	var _ ports.Provider = got
 }
 
 // TestSelectOpenAICompatPrefixes proves the openaicompat factory covers both

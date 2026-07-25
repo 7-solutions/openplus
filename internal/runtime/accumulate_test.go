@@ -5,7 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/7solutions/openplus/internal/provider"
+	"github.com/7solutions/openplus/internal/ports"
+	portsfake "github.com/7solutions/openplus/internal/ports/providerfake"
 )
 
 // TestRunAccumulatesHistory pins that /dream has a transcript to work from in
@@ -57,17 +58,17 @@ func TestRunAccumulatesAcrossTurns(t *testing.T) {
 func TestRunRecordsToolSequence(t *testing.T) {
 	s := cmdSession(t)
 	// script a turn that calls two tools, then finishes
-	s.Provider = &provider.Fake{Scripts: [][]provider.Event{
+	s.Provider = &portsfake.Fake{Scripts: [][]ports.Event{
 		{
-			{Kind: provider.EventToolCallStart, Call: &provider.ToolCall{
+			{Kind: ports.EventToolCallStart, Call: &ports.ToolCall{
 				ID: "c1", Name: "glob", Input: []byte(`{"pattern":"*.go"}`),
 			}},
-			{Kind: provider.EventToolCallStart, Call: &provider.ToolCall{
+			{Kind: ports.EventToolCallStart, Call: &ports.ToolCall{
 				ID: "c2", Name: "grep", Input: []byte(`{"pattern":"func"}`),
 			}},
-			{Kind: provider.EventTurnEnd},
+			{Kind: ports.EventTurnEnd},
 		},
-		{{Kind: provider.EventTextDelta, Text: "done"}, {Kind: provider.EventTurnEnd}},
+		{{Kind: ports.EventTextDelta, Text: "done"}, {Kind: ports.EventTurnEnd}},
 	}}
 
 	if _, err := s.Run(context.Background(), "find things", nil); err != nil {
@@ -104,9 +105,9 @@ func TestDreamWorksAfterRealTurns(t *testing.T) {
 		t.Fatal(err)
 	}
 	// swap in a provider that extracts one fact
-	s.Provider = &provider.Fake{Scripts: [][]provider.Event{{
-		{Kind: provider.EventTextDelta, Text: "- the build is cgo-free\n"},
-		{Kind: provider.EventTurnEnd},
+	s.Provider = &portsfake.Fake{Scripts: [][]ports.Event{{
+		{Kind: ports.EventTextDelta, Text: "- the build is cgo-free\n"},
+		{Kind: ports.EventTurnEnd},
 	}}}
 
 	out := run(t, s, "/dream")

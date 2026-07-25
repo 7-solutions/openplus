@@ -11,14 +11,14 @@ import (
 	"time"
 
 	"github.com/7solutions/openplus/internal/policy"
-	"github.com/7solutions/openplus/internal/provider"
+	"github.com/7solutions/openplus/internal/ports"
 )
 
 // --- T-1100: fan-out ---
 
 func TestFanoutRunsEveryPrompt(t *testing.T) {
 	s := cmdSession(t)
-	// provider.Fake scripts a fixed number of turns; a fan-out makes one call
+	// ports.Fake scripts a fixed number of turns; a fan-out makes one call
 	// per subagent, so use a provider that answers every call.
 	s.Provider = &alwaysProvider{reply: "subagent done"}
 
@@ -130,7 +130,7 @@ func TestSubagentGateResolvesAskWithoutBlocking(t *testing.T) {
 
 	done := make(chan policy.Decision, 1)
 	go func() {
-		d, _ := gate.Permit(context.Background(), provider.ToolCall{Name: "bash", Input: []byte(`{}`)})
+		d, _ := gate.Permit(context.Background(), ports.ToolCall{Name: "bash", Input: []byte(`{}`)})
 		done <- d
 	}()
 	select {
@@ -152,7 +152,7 @@ func TestSubagentGateStillDenies(t *testing.T) {
 	}
 	gate := subagentGate(rules)
 
-	got, err := gate.Permit(context.Background(), provider.ToolCall{Name: "rm", Input: []byte(`{}`)})
+	got, err := gate.Permit(context.Background(), ports.ToolCall{Name: "rm", Input: []byte(`{}`)})
 	if err != nil {
 		t.Fatalf("Permit: %v", err)
 	}
@@ -166,7 +166,7 @@ func TestSubagentGateNilRulesIsSafe(t *testing.T) {
 	if gate == nil {
 		t.Fatal("subagentGate(nil) should still return a usable gate")
 	}
-	if _, err := gate.Permit(context.Background(), provider.ToolCall{Name: "read"}); err != nil {
+	if _, err := gate.Permit(context.Background(), ports.ToolCall{Name: "read"}); err != nil {
 		t.Fatalf("Permit: %v", err)
 	}
 }
@@ -329,14 +329,14 @@ func gitOut(t *testing.T, dir string, args ...string) string {
 }
 
 // alwaysProvider answers every request with the same reply, however many calls
-// arrive. provider.Fake plays a fixed script and defaults to an empty turn once
+// arrive. ports.Fake plays a fixed script and defaults to an empty turn once
 // it runs out, which a fan-out exhausts immediately.
 type alwaysProvider struct{ reply string }
 
-func (a *alwaysProvider) Stream(_ context.Context, _ provider.Request) (<-chan provider.Event, error) {
-	ch := make(chan provider.Event, 2)
-	ch <- provider.Event{Kind: provider.EventTextDelta, Text: a.reply}
-	ch <- provider.Event{Kind: provider.EventTurnEnd}
+func (a *alwaysProvider) Stream(_ context.Context, _ ports.Request) (<-chan ports.Event, error) {
+	ch := make(chan ports.Event, 2)
+	ch <- ports.Event{Kind: ports.EventTextDelta, Text: a.reply}
+	ch <- ports.Event{Kind: ports.EventTurnEnd}
 	close(ch)
 	return ch, nil
 }
@@ -347,19 +347,19 @@ type delayedProvider struct {
 	n  int
 }
 
-func (d *delayedProvider) Stream(_ context.Context, req provider.Request) (<-chan provider.Event, error) {
+func (d *delayedProvider) Stream(_ context.Context, req ports.Request) (<-chan ports.Event, error) {
 	d.mu.Lock()
 	d.n++
 	first := d.n == 1
 	d.mu.Unlock()
 
-	ch := make(chan provider.Event, 2)
+	ch := make(chan ports.Event, 2)
 	go func() {
 		if first {
 			time.Sleep(80 * time.Millisecond)
 		}
-		ch <- provider.Event{Kind: provider.EventTextDelta, Text: "done"}
-		ch <- provider.Event{Kind: provider.EventTurnEnd}
+		ch <- ports.Event{Kind: ports.EventTextDelta, Text: "done"}
+		ch <- ports.Event{Kind: ports.EventTurnEnd}
 		close(ch)
 	}()
 	return ch, nil
@@ -368,7 +368,7 @@ func (d *delayedProvider) Stream(_ context.Context, req provider.Request) (<-cha
 // failOnProvider errors when the request mentions a marker.
 type failOnProvider struct{ failWhenContains string }
 
-func (f *failOnProvider) Stream(_ context.Context, req provider.Request) (<-chan provider.Event, error) {
+func (f *failOnProvider) Stream(_ context.Context, req ports.Request) (<-chan ports.Event, error) {
 	hit := false
 	for _, m := range req.Messages {
 		for _, b := range m.Blocks {
@@ -377,14 +377,14 @@ func (f *failOnProvider) Stream(_ context.Context, req provider.Request) (<-chan
 			}
 		}
 	}
-	ch := make(chan provider.Event, 2)
+	ch := make(chan ports.Event, 2)
 	if hit {
-		ch <- provider.Event{Kind: provider.EventError, Err: os.ErrInvalid}
+		ch <- ports.Event{Kind: ports.EventError, Err: os.ErrInvalid}
 		close(ch)
 		return ch, nil
 	}
-	ch <- provider.Event{Kind: provider.EventTextDelta, Text: "ok"}
-	ch <- provider.Event{Kind: provider.EventTurnEnd}
+	ch <- ports.Event{Kind: ports.EventTextDelta, Text: "ok"}
+	ch <- ports.Event{Kind: ports.EventTurnEnd}
 	close(ch)
 	return ch, nil
 }
@@ -396,7 +396,7 @@ type concurrencyProvider struct {
 	max      int
 }
 
-func (c *concurrencyProvider) Stream(_ context.Context, _ provider.Request) (<-chan provider.Event, error) {
+func (c *concurrencyProvider) Stream(_ context.Context, _ ports.Request) (<-chan ports.Event, error) {
 	c.mu.Lock()
 	c.inFlight++
 	if c.inFlight > c.max {
@@ -404,14 +404,14 @@ func (c *concurrencyProvider) Stream(_ context.Context, _ provider.Request) (<-c
 	}
 	c.mu.Unlock()
 
-	ch := make(chan provider.Event, 2)
+	ch := make(chan ports.Event, 2)
 	go func() {
 		time.Sleep(30 * time.Millisecond)
 		c.mu.Lock()
 		c.inFlight--
 		c.mu.Unlock()
-		ch <- provider.Event{Kind: provider.EventTextDelta, Text: "ok"}
-		ch <- provider.Event{Kind: provider.EventTurnEnd}
+		ch <- ports.Event{Kind: ports.EventTextDelta, Text: "ok"}
+		ch <- ports.Event{Kind: ports.EventTurnEnd}
 		close(ch)
 	}()
 	return ch, nil

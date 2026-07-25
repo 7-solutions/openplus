@@ -7,7 +7,8 @@ import (
 	"testing"
 
 	"github.com/7solutions/openplus/internal/orchestrate"
-	"github.com/7solutions/openplus/internal/provider"
+	"github.com/7solutions/openplus/internal/ports"
+	portsfake "github.com/7solutions/openplus/internal/ports/providerfake"
 )
 
 // maxSession builds a session whose provider plays n generations followed by the
@@ -19,18 +20,18 @@ func maxSession(t *testing.T, gens []string, judge string) *Session {
 	if err != nil {
 		t.Fatalf("Assemble: %v", err)
 	}
-	scripts := make([][]provider.Event, 0, len(gens)+1)
+	scripts := make([][]ports.Event, 0, len(gens)+1)
 	for _, g := range gens {
-		scripts = append(scripts, []provider.Event{
-			{Kind: provider.EventTextDelta, Text: g},
-			{Kind: provider.EventTurnEnd},
+		scripts = append(scripts, []ports.Event{
+			{Kind: ports.EventTextDelta, Text: g},
+			{Kind: ports.EventTurnEnd},
 		})
 	}
-	scripts = append(scripts, []provider.Event{
-		{Kind: provider.EventTextDelta, Text: judge},
-		{Kind: provider.EventTurnEnd},
+	scripts = append(scripts, []ports.Event{
+		{Kind: ports.EventTextDelta, Text: judge},
+		{Kind: ports.EventTurnEnd},
 	})
-	s.Provider = &provider.Fake{Scripts: scripts}
+	s.Provider = &portsfake.Fake{Scripts: scripts}
 	return s
 }
 
@@ -131,13 +132,13 @@ func (r *recordingFake) models() []string {
 	return append([]string(nil), r.seen...)
 }
 
-func (r *recordingFake) Stream(ctx context.Context, req provider.Request) (<-chan provider.Event, error) {
+func (r *recordingFake) Stream(ctx context.Context, req ports.Request) (<-chan ports.Event, error) {
 	r.mu.Lock()
 	r.seen = append(r.seen, req.Model)
 	r.mu.Unlock()
-	ch := make(chan provider.Event, 2)
-	ch <- provider.Event{Kind: provider.EventTextDelta, Text: "BEST: 0\nchosen"}
-	ch <- provider.Event{Kind: provider.EventTurnEnd}
+	ch := make(chan ports.Event, 2)
+	ch <- ports.Event{Kind: ports.EventTextDelta, Text: "BEST: 0\nchosen"}
+	ch <- ports.Event{Kind: ports.EventTurnEnd}
 	close(ch)
 	return ch, nil
 }

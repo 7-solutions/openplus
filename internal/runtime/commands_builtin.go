@@ -11,7 +11,7 @@ import (
 	"github.com/7solutions/openplus/internal/config"
 	"github.com/7solutions/openplus/internal/improve"
 	"github.com/7solutions/openplus/internal/orchestrate"
-	"github.com/7solutions/openplus/internal/provider"
+	"github.com/7solutions/openplus/internal/ports"
 )
 
 // builtinCommands is the dispatch table. Every entry closes a milestone
@@ -444,12 +444,12 @@ func (s *Session) cmdMax(args string) (string, error) {
 		Ranker: orchestrate.Ranker{Provider: s.Provider, Model: judgeModel},
 	}
 
-	req := provider.Request{
+	req := ports.Request{
 		Model:  s.Model,
 		System: s.SystemPrompt,
-		Messages: []provider.Message{{
-			Role:   provider.RoleUser,
-			Blocks: []provider.Block{{Kind: provider.BlockText, Text: prompt}},
+		Messages: []ports.Message{{
+			Role:   ports.RoleUser,
+			Blocks: []ports.Block{{Kind: ports.BlockText, Text: prompt}},
 		}},
 		// No tools: candidates answer, they do not act (the sampler enforces
 		// this too; passing none makes the intent explicit here).

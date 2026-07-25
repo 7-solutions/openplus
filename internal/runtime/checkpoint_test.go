@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/7solutions/openplus/internal/contextmgr"
-	"github.com/7solutions/openplus/internal/provider"
+	"github.com/7solutions/openplus/internal/ports"
 )
 
 // windowConfig is a project whose context window is small enough that a short
@@ -182,9 +182,9 @@ func TestAssembleContextLiveHistoryOutranksDigest(t *testing.T) {
 	pre := contextmgr.Checkpointer{Root: root, Window: 200000}
 	if err := pre.Write(contextmgr.Checkpoint{
 		Summary: "s",
-		Recent: []provider.Message{{
-			Role:   provider.RoleUser,
-			Blocks: []provider.Block{{Kind: provider.BlockText, Text: "STALE-DIGEST-LINE"}},
+		Recent: []ports.Message{{
+			Role:   ports.RoleUser,
+			Blocks: []ports.Block{{Kind: ports.BlockText, Text: "STALE-DIGEST-LINE"}},
 		}},
 	}); err != nil {
 		t.Fatal(err)
@@ -194,9 +194,9 @@ func TestAssembleContextLiveHistoryOutranksDigest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	live := []provider.Message{{
-		Role:   provider.RoleUser,
-		Blocks: []provider.Block{{Kind: provider.BlockText, Text: "LIVE-LINE"}},
+	live := []ports.Message{{
+		Role:   ports.RoleUser,
+		Blocks: []ports.Block{{Kind: ports.BlockText, Text: "LIVE-LINE"}},
 	}}
 	turn, err := s.AssembleContext(context.Background(), "next", live)
 	if err != nil {

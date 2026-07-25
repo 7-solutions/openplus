@@ -1,5 +1,5 @@
 // Package openaicompat is the OpenAI-compatible Chat Completions adapter
-// (ADR-0005, T-013). It maps the neutral provider.Request/Event model onto the
+// (ADR-0005, T-013). It maps the neutral ports.Request/Event model onto the
 // Chat Completions wire shape — a system message, assistant tool_calls[] with
 // stringified function.arguments, role:"tool" results — and parses the
 // chat.completion.chunk SSE stream (argument fragments keyed by tool index,
@@ -7,7 +7,7 @@
 //
 // One adapter unlocks OpenAI, Ollama, vLLM, LM Studio, OpenRouter, Groq, and
 // any baseURL-configured endpoint. No OpenAI type escapes this package; the
-// agent loop sees only provider.Provider.
+// agent loop sees only ports.Provider.
 package openaicompat
 
 import (
@@ -20,6 +20,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/7solutions/openplus/internal/ports"
 	"github.com/7solutions/openplus/internal/provider"
 )
 
@@ -28,7 +29,7 @@ import (
 const DefaultBaseURL = "https://api.openai.com/v1"
 
 // Adapter speaks the OpenAI-compatible Chat Completions API. It implements
-// provider.Provider.
+// ports.Provider.
 type Adapter struct {
 	// BaseURL overrides DefaultBaseURL. Must end with the version segment the
 	// endpoint expects (typically /v1); the path /chat/completions is appended.
@@ -42,7 +43,7 @@ type Adapter struct {
 // Stream posts req to {BaseURL}/chat/completions as a streaming Chat
 // Completions request and returns a channel of neutral Events parsed from the
 // SSE response.
-func (a *Adapter) Stream(ctx context.Context, req provider.Request) (<-chan provider.Event, error) {
+func (a *Adapter) Stream(ctx context.Context, req ports.Request) (<-chan ports.Event, error) {
 	base := a.BaseURL
 	if base == "" {
 		base = DefaultBaseURL
@@ -69,7 +70,7 @@ func (a *Adapter) Stream(ctx context.Context, req provider.Request) (<-chan prov
 		return nil, fmt.Errorf("openaicompat: post: %w", err)
 	}
 
-	out := make(chan provider.Event)
+	out := make(chan ports.Event)
 	go func() {
 		defer close(out)
 		defer resp.Body.Close()
@@ -79,28 +80,28 @@ func (a *Adapter) Stream(ctx context.Context, req provider.Request) (<-chan prov
 }
 
 // pump reads the SSE stream and emits neutral Events.
-func (a *Adapter) pump(ctx context.Context, resp *http.Response, out chan<- provider.Event) {
+func (a *Adapter) pump(ctx context.Context, resp *http.Response, out chan<- ports.Event) {
 	if resp.StatusCode != http.StatusOK {
 		preview, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		send(ctx, out, provider.Event{Kind: provider.EventError, Err: fmt.Errorf("openaicompat: http %d: %s", resp.StatusCode, preview)})
+		send(ctx, out, ports.Event{Kind: ports.EventError, Err: fmt.Errorf("openaicompat: http %d: %s", resp.StatusCode, preview)})
 		return
 	}
 
 	frames, errs := provider.ReadSSE(ctx, resp.Body)
 
 	calls := map[int]*toolAcc{}
-	var usage *provider.Usage
+	var usage *ports.Usage
 
-	emit := func(ev provider.Event) { send(ctx, out, ev) }
+	emit := func(ev ports.Event) { send(ctx, out, ev) }
 
 	for {
 		select {
 		case <-ctx.Done():
-			emit(provider.Event{Kind: provider.EventError, Err: ctx.Err()})
+			emit(ports.Event{Kind: ports.EventError, Err: ctx.Err()})
 			return
 		case err, ok := <-errs:
 			if ok && err != nil {
-				emit(provider.Event{Kind: provider.EventError, Err: fmt.Errorf("openaicompat: sse: %w", err)})
+				emit(ports.Event{Kind: ports.EventError, Err: fmt.Errorf("openaicompat: sse: %w", err)})
 				return
 			}
 		case frame, ok := <-frames:
@@ -120,28 +121,28 @@ func (a *Adapter) pump(ctx context.Context, resp *http.Response, out chan<- prov
 
 // finalize emits accumulated tool calls (index order), then usage, then
 // TurnEnd. Called once on [DONE] or unexpected stream end.
-func finalize(calls map[int]*toolAcc, usage *provider.Usage, emit func(provider.Event)) {
+func finalize(calls map[int]*toolAcc, usage *ports.Usage, emit func(ports.Event)) {
 	indices := make([]int, 0, len(calls))
 	for i := range calls {
 		indices = append(indices, i)
 	}
 	sort.Ints(indices)
 	for _, i := range indices {
-		emit(provider.Event{Kind: provider.EventToolCallStart, Call: &provider.ToolCall{
+		emit(ports.Event{Kind: ports.EventToolCallStart, Call: &ports.ToolCall{
 			ID:    calls[i].id,
 			Name:  calls[i].name,
 			Input: []byte(calls[i].args.String()),
 		}})
 	}
 	if usage != nil {
-		emit(provider.Event{Kind: provider.EventUsage, Usage: usage})
+		emit(ports.Event{Kind: ports.EventUsage, Usage: usage})
 	}
-	emit(provider.Event{Kind: provider.EventTurnEnd})
+	emit(ports.Event{Kind: ports.EventTurnEnd})
 }
 
 // handleChunk decodes one chat.completion.chunk into neutral Events (text
 // deltas, tool-call argument accumulation) and returns any updated usage.
-func handleChunk(data string, calls map[int]*toolAcc, emit func(provider.Event), usage *provider.Usage) *provider.Usage {
+func handleChunk(data string, calls map[int]*toolAcc, emit func(ports.Event), usage *ports.Usage) *ports.Usage {
 	var chunk struct {
 		Choices []struct {
 			Delta struct {
@@ -167,7 +168,7 @@ func handleChunk(data string, calls map[int]*toolAcc, emit func(provider.Event),
 	}
 	for _, ch := range chunk.Choices {
 		if ch.Delta.Content != "" {
-			emit(provider.Event{Kind: provider.EventTextDelta, Text: ch.Delta.Content})
+			emit(ports.Event{Kind: ports.EventTextDelta, Text: ch.Delta.Content})
 		}
 		for _, tc := range ch.Delta.ToolCalls {
 			acc := calls[tc.Index]
@@ -187,7 +188,7 @@ func handleChunk(data string, calls map[int]*toolAcc, emit func(provider.Event),
 		}
 	}
 	if chunk.Usage != nil {
-		return &provider.Usage{
+		return &ports.Usage{
 			InputTokens:  chunk.Usage.PromptTokens,
 			OutputTokens: chunk.Usage.CompletionTokens,
 		}
@@ -197,7 +198,7 @@ func handleChunk(data string, calls map[int]*toolAcc, emit func(provider.Event),
 
 // --- request marshaling ---
 
-func marshalRequest(req provider.Request) ([]byte, error) {
+func marshalRequest(req ports.Request) ([]byte, error) {
 	out := map[string]any{
 		"model":    stripProviderPrefix(req.Model),
 		"stream":   true,
@@ -227,21 +228,21 @@ type wireToolCall struct {
 //     message-level tool_calls[] with stringified arguments.
 //   - user: ToolResult blocks become separate {role:"tool", tool_call_id}
 //     messages; text blocks join into one {role:"user"} message.
-func marshalMessages(system string, msgs []provider.Message) []any {
+func marshalMessages(system string, msgs []ports.Message) []any {
 	out := make([]any, 0, len(msgs)+1)
 	if system != "" {
 		out = append(out, map[string]any{"role": "system", "content": system})
 	}
 	for _, m := range msgs {
 		switch m.Role {
-		case provider.RoleAssistant:
+		case ports.RoleAssistant:
 			var texts []string
 			var toolCalls []wireToolCall
 			for _, b := range m.Blocks {
 				switch b.Kind {
-				case provider.BlockText:
+				case ports.BlockText:
 					texts = append(texts, b.Text)
-				case provider.BlockToolCall:
+				case ports.BlockToolCall:
 					var tc wireToolCall
 					tc.ID = b.ToolCallID
 					tc.Type = "function"
@@ -258,18 +259,18 @@ func marshalMessages(system string, msgs []provider.Message) []any {
 				msg["tool_calls"] = toolCalls
 			}
 			out = append(out, msg)
-		case provider.RoleUser:
+		case ports.RoleUser:
 			var texts []string
 			for _, b := range m.Blocks {
 				switch b.Kind {
-				case provider.BlockToolResult:
+				case ports.BlockToolResult:
 					// OpenAI has no is_error field; errors are carried as content.
 					out = append(out, map[string]any{
 						"role":         "tool",
 						"tool_call_id": b.ToolResultForID,
 						"content":      b.ToolResultText,
 					})
-				case provider.BlockText:
+				case ports.BlockText:
 					texts = append(texts, b.Text)
 				}
 			}
@@ -281,7 +282,7 @@ func marshalMessages(system string, msgs []provider.Message) []any {
 	return out
 }
 
-func marshalTools(tools []provider.ToolSchema) []any {
+func marshalTools(tools []ports.ToolSchema) []any {
 	out := make([]any, 0, len(tools))
 	for _, t := range tools {
 		params := json.RawMessage(t.InputSchema)
@@ -310,7 +311,7 @@ func stripProviderPrefix(model string) string {
 	return model
 }
 
-func send(ctx context.Context, out chan<- provider.Event, ev provider.Event) {
+func send(ctx context.Context, out chan<- ports.Event, ev ports.Event) {
 	select {
 	case <-ctx.Done():
 	case out <- ev:

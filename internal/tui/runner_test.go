@@ -7,18 +7,18 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/7solutions/openplus/internal/provider"
+	"github.com/7solutions/openplus/internal/ports"
 )
 
 // stubRunner records the input it was asked to run and returns a canned history.
 type stubRunner struct {
 	gotInput   string
-	gotHistory []provider.Message
+	gotHistory []ports.Message
 	reply      string
 	err        error
 }
 
-func (r *stubRunner) Run(_ context.Context, input string, history []provider.Message) ([]provider.Message, error) {
+func (r *stubRunner) Run(_ context.Context, input string, history []ports.Message) ([]ports.Message, error) {
 	r.gotInput = input
 	r.gotHistory = history
 	if r.err != nil {
@@ -28,14 +28,14 @@ func (r *stubRunner) Run(_ context.Context, input string, history []provider.Mes
 	// it (plus the assistant reply) to the prior history. The model therefore
 	// never owns user-turn assembly — it only owns the transcript returned by
 	// the runner.
-	out := append([]provider.Message{}, history...)
-	out = append(out, provider.Message{
-		Role:   provider.RoleUser,
-		Blocks: []provider.Block{{Kind: provider.BlockText, Text: input}},
+	out := append([]ports.Message{}, history...)
+	out = append(out, ports.Message{
+		Role:   ports.RoleUser,
+		Blocks: []ports.Block{{Kind: ports.BlockText, Text: input}},
 	})
-	return append(out, provider.Message{
-		Role:   provider.RoleAssistant,
-		Blocks: []provider.Block{{Kind: provider.BlockText, Text: r.reply}},
+	return append(out, ports.Message{
+		Role:   ports.RoleAssistant,
+		Blocks: []ports.Block{{Kind: ports.BlockText, Text: r.reply}},
 	}), nil
 }
 

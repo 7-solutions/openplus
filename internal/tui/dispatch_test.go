@@ -8,7 +8,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/7solutions/openplus/internal/provider"
+	"github.com/7solutions/openplus/internal/ports"
 )
 
 // dispatchRunner is a Runner that also implements Dispatcher, so the TUI can
@@ -126,5 +126,5 @@ func TestSubmitPlainRunnerStillWorks(t *testing.T) {
 var (
 	_ Runner     = (*dispatchRunner)(nil)
 	_ Dispatcher = (*dispatchRunner)(nil)
-	_            = provider.Message{}
+	_            = ports.Message{}
 )

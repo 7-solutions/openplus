@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/7solutions/openplus/internal/provider"
+	"github.com/7solutions/openplus/internal/ports"
 )
 
 // errDreamBoom is a sentinel used by tests to drive the provider-error path.
@@ -34,14 +34,14 @@ anything already obvious from reading the code.`
 // Dreamer extracts durable facts from a session trace with a summarizing model.
 type Dreamer struct {
 	// Provider is the model backend used for extraction.
-	Provider provider.Provider
+	Provider ports.Provider
 	// Model is the extraction model id ("<provider>/<model>").
 	Model string
 }
 
 // Extract reads a trace and returns the durable facts worth persisting. An empty
 // trace yields nothing without consulting the model.
-func (d Dreamer) Extract(ctx context.Context, trace []provider.Message) ([]string, error) {
+func (d Dreamer) Extract(ctx context.Context, trace []ports.Message) ([]string, error) {
 	if len(trace) == 0 {
 		return nil, nil
 	}
@@ -49,13 +49,13 @@ func (d Dreamer) Extract(ctx context.Context, trace []provider.Message) ([]strin
 		return nil, fmt.Errorf("improve: dreamer has no provider configured")
 	}
 
-	req := provider.Request{
+	req := ports.Request{
 		Model:  d.Model,
 		System: dreamSystemPrompt,
-		Messages: []provider.Message{{
-			Role: provider.RoleUser,
-			Blocks: []provider.Block{{
-				Kind: provider.BlockText,
+		Messages: []ports.Message{{
+			Role: ports.RoleUser,
+			Blocks: []ports.Block{{
+				Kind: ports.BlockText,
 				Text: "TRANSCRIPT:\n" + flattenTrace(trace),
 			}},
 		}},
@@ -70,9 +70,9 @@ func (d Dreamer) Extract(ctx context.Context, trace []provider.Message) ([]strin
 	var reply strings.Builder
 	for ev := range events {
 		switch ev.Kind {
-		case provider.EventTextDelta:
+		case ports.EventTextDelta:
 			reply.WriteString(ev.Text)
-		case provider.EventError:
+		case ports.EventError:
 			return nil, fmt.Errorf("improve: dream: %w", ev.Err)
 		}
 	}
@@ -98,16 +98,16 @@ func parseBullets(reply string) []string {
 }
 
 // flattenTrace renders a message history as a plain transcript.
-func flattenTrace(msgs []provider.Message) string {
+func flattenTrace(msgs []ports.Message) string {
 	var b strings.Builder
 	for _, m := range msgs {
 		for _, blk := range m.Blocks {
 			switch blk.Kind {
-			case provider.BlockText, provider.BlockThinking:
+			case ports.BlockText, ports.BlockThinking:
 				fmt.Fprintf(&b, "%s: %s\n", m.Role, blk.Text)
-			case provider.BlockToolCall:
+			case ports.BlockToolCall:
 				fmt.Fprintf(&b, "%s: called %s(%s)\n", m.Role, blk.ToolName, blk.ToolInput)
-			case provider.BlockToolResult:
+			case ports.BlockToolResult:
 				fmt.Fprintf(&b, "tool result: %s\n", blk.ToolResultText)
 			}
 		}

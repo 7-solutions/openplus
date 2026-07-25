@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/7solutions/openplus/internal/provider"
+	"github.com/7solutions/openplus/internal/ports"
 )
 
 func TestHeuristicCountsEmpty(t *testing.T) {
@@ -94,16 +94,16 @@ func TestForModelSelectsByPrefix(t *testing.T) {
 
 func TestCountMessagesIncludesAllBlockKinds(t *testing.T) {
 	tk := Heuristic{}
-	msgs := []provider.Message{
-		{Role: provider.RoleUser, Blocks: []provider.Block{
-			{Kind: provider.BlockText, Text: "please read the file"},
+	msgs := []ports.Message{
+		{Role: ports.RoleUser, Blocks: []ports.Block{
+			{Kind: ports.BlockText, Text: "please read the file"},
 		}},
-		{Role: provider.RoleAssistant, Blocks: []provider.Block{
-			{Kind: provider.BlockThinking, Text: "I should call read"},
-			{Kind: provider.BlockToolCall, ToolName: "read", ToolInput: []byte(`{"file_path":"a.go"}`)},
+		{Role: ports.RoleAssistant, Blocks: []ports.Block{
+			{Kind: ports.BlockThinking, Text: "I should call read"},
+			{Kind: ports.BlockToolCall, ToolName: "read", ToolInput: []byte(`{"file_path":"a.go"}`)},
 		}},
-		{Role: provider.RoleUser, Blocks: []provider.Block{
-			{Kind: provider.BlockToolResult, ToolResultText: "package main"},
+		{Role: ports.RoleUser, Blocks: []ports.Block{
+			{Kind: ports.BlockToolResult, ToolResultText: "package main"},
 		}},
 	}
 	total := CountMessages(tk, msgs)

@@ -1,13 +1,20 @@
 // Package ports declares the ten seams the OpenPlus core depends on (T-004,
-// design.md). It is the single place to read the architecture: the core talks to
-// these interfaces, and every external system is an adapter behind one of them.
+// design.md; change 0018). It is the single place to read the architecture: the
+// core talks to these interfaces, and every external system is an adapter
+// behind one of them.
 //
-// The interfaces here are intentionally narrow restatements of the seams the
-// concrete packages implement — internal/provider, internal/embed,
-// internal/memory, internal/tool, internal/skills, internal/contextmgr,
-// internal/policy, and internal/orchestrate. Keeping the catalogue separate lets
-// a test depend on a seam without importing the implementation (and its
-// dependencies) behind it.
+// The canonical Provider port and all provider-neutral model types
+// (Request, Event, Message, Block, BlockKind, Role, ToolSchema, ToolCall,
+// Usage, EventKind) live in this package — split across model.go (types) and
+// provider.go (the Provider interface itself). The scripted test Fake lives
+// in internal/ports/providerfake. The concrete adapters
+// (internal/provider/anthropic, internal/provider/openaicompat,
+// internal/provider/select) implement ports.Provider; the core never imports
+// them.
+//
+// A leak-guard test (internal/ports/leak_guard_test.go) fails the build if
+// any package outside internal/provider/ and internal/ports/ reaches back
+// into the adapter package.
 package ports
 
 import (
@@ -15,8 +22,6 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
-
-	"github.com/7solutions/openplus/internal/provider"
 )
 
 // PortNames lists every declared port. The count is asserted in tests so a port
@@ -26,11 +31,6 @@ func PortNames() []string {
 		"Provider", "Embedder", "MemoryStore", "Tool", "SkillIndex",
 		"Tokenizer", "Budgeter", "Checkpointer", "PolicyGate", "Workflow",
 	}
-}
-
-// Provider is the model backend seam (ADR-0005).
-type Provider interface {
-	Stream(ctx context.Context, req provider.Request) (<-chan provider.Event, error)
 }
 
 // Embedder turns text into vectors (ADR-0004).
@@ -66,7 +66,7 @@ type Tokenizer interface {
 
 // Budgeter decides what fits in the context window (ADR-0008).
 type Budgeter interface {
-	Fit(budget int, msgs []provider.Message) []provider.Message
+	Fit(budget int, msgs []Message) []Message
 }
 
 // Checkpointer snapshots and restores session state (ADR-0008).
@@ -78,7 +78,7 @@ type Checkpointer interface {
 
 // PolicyGate authorizes tool calls (ADR-0007).
 type PolicyGate interface {
-	Permit(ctx context.Context, call provider.ToolCall) (bool, error)
+	Permit(ctx context.Context, call ToolCall) (bool, error)
 }
 
 // Workflow runs an ordered set of phases (ADR-0006).
@@ -96,9 +96,9 @@ type Workflow interface {
 // FakeProvider streams a single TurnEnd.
 type FakeProvider struct{}
 
-func (FakeProvider) Stream(ctx context.Context, _ provider.Request) (<-chan provider.Event, error) {
-	ch := make(chan provider.Event, 1)
-	ch <- provider.Event{Kind: provider.EventTurnEnd}
+func (FakeProvider) Stream(ctx context.Context, _ Request) (<-chan Event, error) {
+	ch := make(chan Event, 1)
+	ch <- Event{Kind: EventTurnEnd}
 	close(ch)
 	return ch, nil
 }
@@ -193,7 +193,7 @@ func (FakeTokenizer) Count(text string) int { return len(strings.Fields(text)) }
 // FakeBudgeter passes every message through.
 type FakeBudgeter struct{}
 
-func (FakeBudgeter) Fit(_ int, msgs []provider.Message) []provider.Message { return msgs }
+func (FakeBudgeter) Fit(_ int, msgs []Message) []Message { return msgs }
 
 // FakeCheckpointer stores one state string in memory and never asks to
 // checkpoint.
@@ -215,7 +215,7 @@ type FakePolicyGate struct {
 	DenyAll bool
 }
 
-func (f FakePolicyGate) Permit(context.Context, provider.ToolCall) (bool, error) {
+func (f FakePolicyGate) Permit(context.Context, ToolCall) (bool, error) {
 	return !f.DenyAll, nil
 }
 

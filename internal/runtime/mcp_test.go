@@ -12,7 +12,7 @@ import (
 	"testing"
 
 	"github.com/7solutions/openplus/internal/policy"
-	"github.com/7solutions/openplus/internal/provider"
+	"github.com/7solutions/openplus/internal/ports"
 )
 
 // buildMCPEchoServer compiles the MCP test server used by internal/mcp and
@@ -95,7 +95,7 @@ func TestMCPToolIsPermissionGated(t *testing.T) {
 	}
 	defer s.Close()
 
-	got, err := s.Gate.Permit(context.Background(), provider.ToolCall{
+	got, err := s.Gate.Permit(context.Background(), ports.ToolCall{
 		Name:  "ci.echo",
 		Input: json.RawMessage(`{"text":"hi"}`),
 	})

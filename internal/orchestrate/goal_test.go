@@ -5,23 +5,24 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/7solutions/openplus/internal/provider"
+	"github.com/7solutions/openplus/internal/ports"
+	portsfake "github.com/7solutions/openplus/internal/ports/providerfake"
 )
 
 // judgeSays builds a Fake provider that streams one verdict as text.
-func judgeSays(verdict string) *provider.Fake {
-	return &provider.Fake{Scripts: [][]provider.Event{{
-		{Kind: provider.EventTextDelta, Text: verdict},
-		{Kind: provider.EventTurnEnd},
+func judgeSays(verdict string) *portsfake.Fake {
+	return &portsfake.Fake{Scripts: [][]ports.Event{{
+		{Kind: ports.EventTextDelta, Text: verdict},
+		{Kind: ports.EventTurnEnd},
 	}}}
 }
 
-func history(texts ...string) []provider.Message {
-	msgs := make([]provider.Message, 0, len(texts))
+func history(texts ...string) []ports.Message {
+	msgs := make([]ports.Message, 0, len(texts))
 	for _, tx := range texts {
-		msgs = append(msgs, provider.Message{
-			Role:   provider.RoleAssistant,
-			Blocks: []provider.Block{{Kind: provider.BlockText, Text: tx}},
+		msgs = append(msgs, ports.Message{
+			Role:   ports.RoleAssistant,
+			Blocks: []ports.Block{{Kind: ports.BlockText, Text: tx}},
 		})
 	}
 	return msgs
@@ -96,9 +97,9 @@ func TestJudgeAmbiguousVerdictIsUnmet(t *testing.T) {
 func TestJudgeEmptyGoalAlwaysMet(t *testing.T) {
 	// No goal configured means nothing gates stopping; the judge must not be
 	// consulted at all.
-	j := Judge{Provider: &provider.Fake{Scripts: [][]provider.Event{{
-		{Kind: provider.EventTextDelta, Text: "UNMET: should never be asked"},
-		{Kind: provider.EventTurnEnd},
+	j := Judge{Provider: &portsfake.Fake{Scripts: [][]ports.Event{{
+		{Kind: ports.EventTextDelta, Text: "UNMET: should never be asked"},
+		{Kind: ports.EventTurnEnd},
 	}}}}
 	v, err := j.Evaluate(context.Background(), "", history("anything"))
 	if err != nil {
@@ -133,8 +134,8 @@ func TestJudgeUsesJudgeModel(t *testing.T) {
 }
 
 func TestJudgeProviderErrorPropagates(t *testing.T) {
-	j := Judge{Provider: &provider.Fake{Scripts: [][]provider.Event{{
-		{Kind: provider.EventError, Err: errJudgeBoom},
+	j := Judge{Provider: &portsfake.Fake{Scripts: [][]ports.Event{{
+		{Kind: ports.EventError, Err: errJudgeBoom},
 	}}}}
 	if _, err := j.Evaluate(context.Background(), "goal", history("work")); err == nil {
 		t.Fatal("expected the provider error to propagate")
@@ -157,7 +158,7 @@ type recordingProvider struct {
 	gotTools  int
 }
 
-func (r *recordingProvider) Stream(ctx context.Context, req provider.Request) (<-chan provider.Event, error) {
+func (r *recordingProvider) Stream(ctx context.Context, req ports.Request) (<-chan ports.Event, error) {
 	r.gotModel = req.Model
 	r.gotSystem = req.System
 	r.gotTools = len(req.Tools)
@@ -171,9 +172,9 @@ func (r *recordingProvider) Stream(ctx context.Context, req provider.Request) (<
 	}
 	r.gotUser = b.String()
 
-	ch := make(chan provider.Event, 2)
-	ch <- provider.Event{Kind: provider.EventTextDelta, Text: r.reply}
-	ch <- provider.Event{Kind: provider.EventTurnEnd}
+	ch := make(chan ports.Event, 2)
+	ch <- ports.Event{Kind: ports.EventTextDelta, Text: r.reply}
+	ch <- ports.Event{Kind: ports.EventTurnEnd}
 	close(ch)
 	return ch, nil
 }

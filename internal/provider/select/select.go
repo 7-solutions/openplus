@@ -2,7 +2,7 @@
 // T-014). It maps the neutral model string's "<provider>/" prefix to the
 // concrete Provider adapter, wiring resolved config.Provider options into the
 // adapter. This is the only place that knows both config and the adapter
-// packages; everything downstream sees provider.Provider.
+// packages; everything downstream sees ports.Provider.
 //
 // The registry is open for extension: Register(prefix, factory) adds a new
 // adapter. anthropic is registered by default; the OpenAI-compatible adapter
@@ -15,7 +15,7 @@ import (
 	"sync"
 
 	"github.com/7solutions/openplus/internal/config"
-	"github.com/7solutions/openplus/internal/provider"
+	"github.com/7solutions/openplus/internal/ports"
 	"github.com/7solutions/openplus/internal/provider/anthropic"
 	"github.com/7solutions/openplus/internal/provider/openaicompat"
 )
@@ -36,7 +36,7 @@ var (
 // Factory builds a Provider adapter from a resolved config.Provider. Adapters
 // that ignore some fields (e.g. anthropic ignoring baseURL when empty) are free
 // to do so.
-type Factory func(p config.Provider) provider.Provider
+type Factory func(p config.Provider) ports.Provider
 
 var (
 	mu       sync.RWMutex
@@ -69,7 +69,7 @@ func init() {
 
 // newAnthropic builds the Anthropic adapter from resolved config. baseURL is
 // left empty when unset so the adapter falls back to its public default.
-func newAnthropic(p config.Provider) provider.Provider {
+func newAnthropic(p config.Provider) ports.Provider {
 	return &anthropic.Adapter{
 		BaseURL: p.BaseURL,
 		APIKey:  p.APIKey,
@@ -79,7 +79,7 @@ func newAnthropic(p config.Provider) provider.Provider {
 // newOpenAICompat builds the Chat Completions adapter. baseURL (e.g. an
 // Ollama/vLLM endpoint) flows straight through; empty baseURL falls back to
 // the public OpenAI endpoint.
-func newOpenAICompat(p config.Provider) provider.Provider {
+func newOpenAICompat(p config.Provider) ports.Provider {
 	return &openaicompat.Adapter{
 		BaseURL: p.BaseURL,
 		APIKey:  p.APIKey,
@@ -92,7 +92,7 @@ func newOpenAICompat(p config.Provider) provider.Provider {
 //
 // Returns a wrapped ErrBadModel / ErrNoProvider / ErrNoAdapter on the
 // corresponding failures.
-func Select(model string, providers map[string]config.Provider) (provider.Provider, error) {
+func Select(model string, providers map[string]config.Provider) (ports.Provider, error) {
 	prefix, _, err := config.ParseModel(model)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %q", ErrBadModel, model)

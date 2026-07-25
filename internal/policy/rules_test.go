@@ -6,11 +6,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/7solutions/openplus/internal/provider"
+	"github.com/7solutions/openplus/internal/ports"
 )
 
-func call(name string, input string) provider.ToolCall {
-	return provider.ToolCall{Name: name, Input: []byte(input)}
+func call(name string, input string) ports.ToolCall {
+	return ports.ToolCall{Name: name, Input: []byte(input)}
 }
 
 func TestRulesDefaultWhenNoMatch(t *testing.T) {
@@ -131,7 +131,7 @@ type recordingPrompter struct {
 	calls    []string
 }
 
-func (p *recordingPrompter) Ask(ctx context.Context, c provider.ToolCall) (bool, error) {
+func (p *recordingPrompter) Ask(ctx context.Context, c ports.ToolCall) (bool, error) {
 	p.calls = append(p.calls, c.Name)
 	return p.approved, nil
 }
@@ -197,7 +197,7 @@ func TestPromptingPassesThroughAllowDeny(t *testing.T) {
 // prompter that blocks past the ctx deadline surfaces as an error→Deny.
 type blockingPrompter struct{}
 
-func (blockingPrompter) Ask(ctx context.Context, c provider.ToolCall) (bool, error) {
+func (blockingPrompter) Ask(ctx context.Context, c ports.ToolCall) (bool, error) {
 	<-ctx.Done()
 	return false, ctx.Err()
 }

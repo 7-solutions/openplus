@@ -14,7 +14,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"golang.org/x/term"
 
-	"github.com/7solutions/openplus/internal/provider"
+	"github.com/7solutions/openplus/internal/ports"
 	"github.com/7solutions/openplus/internal/runtime"
 	"github.com/7solutions/openplus/internal/tui"
 )
@@ -132,12 +132,12 @@ func runOnce(session *runtime.Session, prompt string) error {
 		prompt = "Say hello and describe what you can do."
 	}
 
-	session.OnEvent = func(ev provider.Event) {
-		if ev.Kind == provider.EventTextDelta {
+	session.OnEvent = func(ev ports.Event) {
+		if ev.Kind == ports.EventTextDelta {
 			fmt.Print(ev.Text)
 		}
 	}
-	session.OnToolResult = func(call provider.ToolCall, res provider.Block) {
+	session.OnToolResult = func(call ports.ToolCall, res ports.Block) {
 		if res.ToolResultError {
 			fmt.Fprintf(os.Stderr, "\n✗ %s: %s\n", call.Name, res.ToolResultText)
 			return
@@ -187,8 +187,8 @@ func runTUI(session *runtime.Session) error {
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	session.Theme = tui.NewThemeControl(p.Send, palette.Name)
 
-	session.OnEvent = func(ev provider.Event) { p.Send(tui.StreamMsg(ev)) }
-	session.OnToolResult = func(call provider.ToolCall, res provider.Block) {
+	session.OnEvent = func(ev ports.Event) { p.Send(tui.StreamMsg(ev)) }
+	session.OnToolResult = func(call ports.ToolCall, res ports.Block) {
 		p.Send(tui.ToolResultMsg{Call: call, Result: res})
 	}
 	session.OnCompact = func(before, after int) {

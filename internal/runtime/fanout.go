@@ -10,7 +10,7 @@ import (
 	"github.com/7solutions/openplus/internal/agent"
 	"github.com/7solutions/openplus/internal/orchestrate"
 	"github.com/7solutions/openplus/internal/policy"
-	"github.com/7solutions/openplus/internal/provider"
+	"github.com/7solutions/openplus/internal/ports"
 	"github.com/7solutions/openplus/internal/tool"
 )
 
@@ -102,7 +102,7 @@ func (s *Session) runSubagent(ctx context.Context, prompt, dir string) (string, 
 		// reported when the fan-out merges.
 	}
 
-	history := []provider.Message{userMessage(prompt)}
+	history := []ports.Message{userMessage(prompt)}
 	final, err := a.Run(ctx, s.SystemPrompt, s.ToolSchemas, history)
 	if err != nil {
 		return "", err
@@ -139,7 +139,7 @@ type askDeniesGate struct {
 	rules *policy.Rules
 }
 
-func (g askDeniesGate) Permit(ctx context.Context, call provider.ToolCall) (policy.Decision, error) {
+func (g askDeniesGate) Permit(ctx context.Context, call ports.ToolCall) (policy.Decision, error) {
 	d, err := g.rules.Permit(ctx, call)
 	if err != nil {
 		return policy.Deny, err

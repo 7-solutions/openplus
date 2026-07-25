@@ -4,12 +4,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/7solutions/openplus/internal/provider"
+	"github.com/7solutions/openplus/internal/ports"
 )
 
-func userMsg(text string) provider.Message {
-	return provider.Message{Role: provider.RoleUser, Blocks: []provider.Block{
-		{Kind: provider.BlockText, Text: text},
+func userMsg(text string) ports.Message {
+	return ports.Message{Role: ports.RoleUser, Blocks: []ports.Block{
+		{Kind: ports.BlockText, Text: text},
 	}}
 }
 
@@ -21,7 +21,7 @@ func TestBudgeterFitsEverythingWhenBudgetIsAmple(t *testing.T) {
 		Progress:   "wrote the test first",
 		Checkpoint: "earlier: implemented the tokenizer",
 		Memory:     []string{"prefers TDD", "cgo-free build"},
-		Recent:     []provider.Message{userMsg("hello"), userMsg("world")},
+		Recent:     []ports.Message{userMsg("hello"), userMsg("world")},
 	}
 	got := b.Fit(in)
 	if got.System != in.System {
@@ -60,7 +60,7 @@ func TestBudgeterKeepsSystemAndTaskUnderPressure(t *testing.T) {
 		Progress:   strings.Repeat("progress detail. ", 200),
 		Checkpoint: strings.Repeat("checkpoint detail. ", 200),
 		Memory:     []string{strings.Repeat("memory. ", 200)},
-		Recent:     []provider.Message{userMsg(strings.Repeat("recent. ", 200))},
+		Recent:     []ports.Message{userMsg(strings.Repeat("recent. ", 200))},
 	})
 	if got.System != sys {
 		t.Fatalf("system must never be dropped, got %q", got.System)
@@ -88,7 +88,7 @@ func TestBudgeterPriorityOrder(t *testing.T) {
 		Progress:   "prog",
 		Checkpoint: "ckpt",
 		Memory:     []string{"mem"},
-		Recent:     []provider.Message{userMsg("recent")},
+		Recent:     []ports.Message{userMsg("recent")},
 	}
 
 	// With a tiny budget only system fits.
@@ -118,7 +118,7 @@ func TestBudgeterPriorityOrder(t *testing.T) {
 
 func TestBudgeterKeepsNewestRecentMessages(t *testing.T) {
 	tk := Heuristic{}
-	msgs := []provider.Message{
+	msgs := []ports.Message{
 		userMsg("oldest message here"),
 		userMsg("middle message here"),
 		userMsg("newest message here"),
@@ -138,7 +138,7 @@ func TestBudgeterKeepsNewestRecentMessages(t *testing.T) {
 
 func TestBudgeterRecentStaysChronological(t *testing.T) {
 	tk := Heuristic{}
-	msgs := []provider.Message{userMsg("first"), userMsg("second"), userMsg("third")}
+	msgs := []ports.Message{userMsg("first"), userMsg("second"), userMsg("third")}
 	got := Budgeter{Tokenizer: tk, Budget: 100_000}.Fit(Input{Recent: msgs})
 	if len(got.Recent) != 3 {
 		t.Fatalf("recent = %d, want 3", len(got.Recent))
@@ -155,7 +155,7 @@ func TestBudgeterZeroBudgetIsUnlimited(t *testing.T) {
 	// A zero budget means "no limit configured" — do not silently drop context.
 	got := Budgeter{Tokenizer: Heuristic{}}.Fit(Input{
 		System: "sys",
-		Recent: []provider.Message{userMsg(strings.Repeat("x ", 5000))},
+		Recent: []ports.Message{userMsg(strings.Repeat("x ", 5000))},
 	})
 	if got.System != "sys" || len(got.Recent) != 1 {
 		t.Fatalf("zero budget should pass everything through, got %+v", got)

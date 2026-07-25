@@ -7,12 +7,13 @@ import (
 	"testing"
 
 	"github.com/7solutions/openplus/internal/orchestrate"
-	"github.com/7solutions/openplus/internal/provider"
+	"github.com/7solutions/openplus/internal/ports"
+	portsfake "github.com/7solutions/openplus/internal/ports/providerfake"
 )
 
 // msgs builds n user messages with distinguishable text.
-func msgs(n int) []provider.Message {
-	out := make([]provider.Message, n)
+func msgs(n int) []ports.Message {
+	out := make([]ports.Message, n)
 	for i := range out {
 		out[i] = userMessage(msgTag(i))
 	}
@@ -237,9 +238,9 @@ func TestJudgeLoopSeesFullHistory(t *testing.T) {
 func unmetThenMetJudge(t *testing.T) *orchestrate.Judge {
 	t.Helper()
 	return &orchestrate.Judge{
-		Provider: &provider.Fake{Scripts: [][]provider.Event{
-			{{Kind: provider.EventTextDelta, Text: "UNMET: keep working"}, {Kind: provider.EventTurnEnd}},
-			{{Kind: provider.EventTextDelta, Text: "MET: done now"}, {Kind: provider.EventTurnEnd}},
+		Provider: &portsfake.Fake{Scripts: [][]ports.Event{
+			{{Kind: ports.EventTextDelta, Text: "UNMET: keep working"}, {Kind: ports.EventTurnEnd}},
+			{{Kind: ports.EventTextDelta, Text: "MET: done now"}, {Kind: ports.EventTurnEnd}},
 		}},
 		Model: "fake/judge",
 	}
@@ -248,11 +249,11 @@ func unmetThenMetJudge(t *testing.T) *orchestrate.Judge {
 // historySizeRecorder records the message count of each request it receives.
 type historySizeRecorder struct{ sizes []int }
 
-func (h *historySizeRecorder) Stream(_ context.Context, req provider.Request) (<-chan provider.Event, error) {
+func (h *historySizeRecorder) Stream(_ context.Context, req ports.Request) (<-chan ports.Event, error) {
 	h.sizes = append(h.sizes, len(req.Messages))
-	ch := make(chan provider.Event, 2)
-	ch <- provider.Event{Kind: provider.EventTextDelta, Text: "ok"}
-	ch <- provider.Event{Kind: provider.EventTurnEnd}
+	ch := make(chan ports.Event, 2)
+	ch <- ports.Event{Kind: ports.EventTextDelta, Text: "ok"}
+	ch <- ports.Event{Kind: ports.EventTurnEnd}
 	close(ch)
 	return ch, nil
 }

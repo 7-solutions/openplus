@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/7solutions/openplus/internal/contextmgr"
-	"github.com/7solutions/openplus/internal/provider"
+	"github.com/7solutions/openplus/internal/ports"
 )
 
 // memProject builds a project whose memory store is backed by a deterministic
@@ -163,9 +163,9 @@ func TestAssembleContextCarriesHistory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	prior := []provider.Message{{
-		Role:   provider.RoleUser,
-		Blocks: []provider.Block{{Kind: provider.BlockText, Text: "earlier question"}},
+	prior := []ports.Message{{
+		Role:   ports.RoleUser,
+		Blocks: []ports.Block{{Kind: ports.BlockText, Text: "earlier question"}},
 	}}
 	got, err := s.AssembleContext(context.Background(), "follow-up", prior)
 	if err != nil {
@@ -252,7 +252,7 @@ func TestRunCancelledContext(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	if _, err := s.Run(ctx, "anything", nil); err == nil {
 		t.Fatal("expected a cancellation error")

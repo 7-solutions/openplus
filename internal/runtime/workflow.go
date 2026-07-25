@@ -9,7 +9,7 @@ import (
 	"github.com/7solutions/openplus/internal/agent"
 	"github.com/7solutions/openplus/internal/jsworkflow"
 	"github.com/7solutions/openplus/internal/orchestrate"
-	"github.com/7solutions/openplus/internal/provider"
+	"github.com/7solutions/openplus/internal/ports"
 )
 
 // PreviousPlaceholder is substituted in a phase prompt with the previous phase's
@@ -52,7 +52,7 @@ func (p promptPhase) Run(ctx context.Context, st *orchestrate.State) (string, er
 	}
 
 	final, err := a.Run(ctx, p.session.SystemPrompt, p.session.ToolSchemas,
-		[]provider.Message{userMessage(prompt)})
+		[]ports.Message{userMessage(prompt)})
 	if err != nil {
 		return "", fmt.Errorf("phase %q: %w", p.name, err)
 	}

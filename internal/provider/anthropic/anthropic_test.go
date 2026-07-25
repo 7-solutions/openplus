@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/7solutions/openplus/internal/provider"
+	"github.com/7solutions/openplus/internal/ports"
 )
 
 // recordedSSE is a canned Anthropic streaming body: a text delta ("Hello"),
@@ -69,15 +69,15 @@ func TestStreamParsesTextAndToolCall(t *testing.T) {
 	srv, _ := startFixtureServer(t)
 	a := &Adapter{BaseURL: srv.URL, APIKey: "sk-test"}
 
-	req := provider.Request{
+	req := ports.Request{
 		Model:  "anthropic/claude-sonnet-5",
 		System: "you are helpful",
-		Messages: []provider.Message{
-			{Role: provider.RoleUser, Blocks: []provider.Block{
-				{Kind: provider.BlockText, Text: "hi"},
+		Messages: []ports.Message{
+			{Role: ports.RoleUser, Blocks: []ports.Block{
+				{Kind: ports.BlockText, Text: "hi"},
 			}},
 		},
-		Tools: []provider.ToolSchema{{
+		Tools: []ports.ToolSchema{{
 			Name:        "echo",
 			Description: "echo back",
 			InputSchema: []byte(`{"type":"object","properties":{"text":{"type":"string"}}}`),
@@ -90,22 +90,22 @@ func TestStreamParsesTextAndToolCall(t *testing.T) {
 	}
 
 	var textDeltas []string
-	var calls []provider.ToolCall
-	var usage *provider.Usage
+	var calls []ports.ToolCall
+	var usage *ports.Usage
 	sawTurnEnd := false
 	for ev := range events {
 		switch ev.Kind {
-		case provider.EventTextDelta:
+		case ports.EventTextDelta:
 			textDeltas = append(textDeltas, ev.Text)
-		case provider.EventToolCallStart:
+		case ports.EventToolCallStart:
 			if ev.Call != nil {
 				calls = append(calls, *ev.Call)
 			}
-		case provider.EventUsage:
+		case ports.EventUsage:
 			usage = ev.Usage
-		case provider.EventTurnEnd:
+		case ports.EventTurnEnd:
 			sawTurnEnd = true
-		case provider.EventError:
+		case ports.EventError:
 			t.Fatalf("error event: %v", ev.Err)
 		}
 	}
@@ -139,15 +139,15 @@ func TestStreamSendsAnthropicWireShape(t *testing.T) {
 	srv, got := startFixtureServer(t)
 	a := &Adapter{BaseURL: srv.URL, APIKey: "sk-test"}
 
-	req := provider.Request{
+	req := ports.Request{
 		Model:  "claude-sonnet-5",
 		System: "you are helpful",
-		Messages: []provider.Message{
-			{Role: provider.RoleUser, Blocks: []provider.Block{
-				{Kind: provider.BlockText, Text: "hello"},
+		Messages: []ports.Message{
+			{Role: ports.RoleUser, Blocks: []ports.Block{
+				{Kind: ports.BlockText, Text: "hello"},
 			}},
 		},
-		Tools: []provider.ToolSchema{{
+		Tools: []ports.ToolSchema{{
 			Name:        "echo",
 			Description: "echo back",
 			InputSchema: []byte(`{"type":"object"}`),
@@ -187,7 +187,7 @@ func TestStreamEnablesThinking(t *testing.T) {
 	srv, got := startFixtureServer(t)
 	a := &Adapter{BaseURL: srv.URL, APIKey: "k"}
 
-	req := provider.Request{
+	req := ports.Request{
 		Model:    "claude-sonnet-5",
 		Thinking: true,
 	}
@@ -234,13 +234,13 @@ data: {"type":"message_stop"}
 	defer srv.Close()
 
 	a := &Adapter{BaseURL: srv.URL, APIKey: "k"}
-	events, err := a.Stream(context.Background(), provider.Request{Model: "claude-sonnet-5", Thinking: true})
+	events, err := a.Stream(context.Background(), ports.Request{Model: "claude-sonnet-5", Thinking: true})
 	if err != nil {
 		t.Fatalf("Stream: %v", err)
 	}
 	var thought string
 	for ev := range events {
-		if ev.Kind == provider.EventThinkingDelta {
+		if ev.Kind == ports.EventThinkingDelta {
 			thought += ev.Text
 		}
 	}
@@ -256,11 +256,11 @@ func TestStreamNoArgToolCallInputDefaultsToObject(t *testing.T) {
 	srv, got := startFixtureServer(t)
 	a := &Adapter{BaseURL: srv.URL, APIKey: "k"}
 
-	req := provider.Request{
+	req := ports.Request{
 		Model: "claude-sonnet-5",
-		Messages: []provider.Message{
-			{Role: provider.RoleAssistant, Blocks: []provider.Block{
-				{Kind: provider.BlockToolCall, ToolCallID: "c1", ToolName: "ping"},
+		Messages: []ports.Message{
+			{Role: ports.RoleAssistant, Blocks: []ports.Block{
+				{Kind: ports.BlockToolCall, ToolCallID: "c1", ToolName: "ping"},
 				// ToolInput left nil — no-arg tool
 			}},
 		},
@@ -284,14 +284,14 @@ func TestStreamMapsToolResultBack(t *testing.T) {
 	srv, got := startFixtureServer(t)
 	a := &Adapter{BaseURL: srv.URL, APIKey: "sk-test"}
 
-	req := provider.Request{
+	req := ports.Request{
 		Model: "claude-sonnet-5",
-		Messages: []provider.Message{
-			{Role: provider.RoleAssistant, Blocks: []provider.Block{
-				{Kind: provider.BlockToolCall, ToolCallID: "toolu_1", ToolName: "echo", ToolInput: []byte(`{"text":"hi"}`)},
+		Messages: []ports.Message{
+			{Role: ports.RoleAssistant, Blocks: []ports.Block{
+				{Kind: ports.BlockToolCall, ToolCallID: "toolu_1", ToolName: "echo", ToolInput: []byte(`{"text":"hi"}`)},
 			}},
-			{Role: provider.RoleUser, Blocks: []provider.Block{
-				{Kind: provider.BlockToolResult, ToolResultForID: "toolu_1", ToolResultText: "hi", ToolResultError: true},
+			{Role: ports.RoleUser, Blocks: []ports.Block{
+				{Kind: ports.BlockToolResult, ToolResultForID: "toolu_1", ToolResultText: "hi", ToolResultError: true},
 			}},
 		},
 	}
